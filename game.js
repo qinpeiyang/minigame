@@ -153,7 +153,7 @@ function drawObject(kind, x, y, s, clean) {
 }
 
 function objectBox() { const size = Math.min(W * .82, H * .36); return { x: W/2, y: H*.45, s: size / 330, size } }
-function playArea() { return { x: 14, y: 94, w: W - 28, h: H - 214 } }
+function playArea() { return { x: 0, y: 84, w: W, h: H - 188 } }
 function levelTheme(idx) {
   const lv = levels[idx]
   if (idx < 5) return { base1: '#F7FBFF', base2: '#E9F1F7', line: '#DCE6EE', stain: '#E92020', accent: '#9EA9B4', title: lv[0] + '表面' }
@@ -166,26 +166,41 @@ function makeDirtPatch(x, y, r, hp, typeIndex, style, text) {
 }
 function generateSurfaceDirt(idx) {
   const area = playArea(), lv = levels[idx]
-  const count = Math.floor(70 + lv[3] * 45)
+  const count = Math.floor(85 + lv[3] * 52)
   dirt = []
+  const zones = [
+    { name: 'floor', x1: .05, x2: .95, y1: .58, y2: .98, weight: .34 },
+    { name: 'rightWall', x1: .50, x2: .98, y1: .08, y2: .72, weight: .36 },
+    { name: 'leftObj', x1: .02, x2: .38, y1: .26, y2: .82, weight: .18 },
+    { name: 'ceiling', x1: .14, x2: .76, y1: .02, y2: .18, weight: .12 }
+  ]
+  function pickZone() { const r=Math.random(); let a=0; for(const z of zones){a+=z.weight;if(r<a)return z} return zones[0] }
   for (let i = 0; i < count; i++) {
+    const z = pickZone()
     const typeIndex = clamp(Math.floor(rand(0, lv[4] + 1)), 0, stainTypes.length - 1)
     const st = stainTypes[typeIndex]
-    const x = rand(area.x + 28, area.x + area.w - 28)
-    const y = rand(area.y + 34, area.y + area.h - 34)
-    const r = rand(9, 27) * (1 + lv[3] * .05)
-    const style = Math.random() < .44 ? 'stroke' : Math.random() < .72 ? 'splash' : 'graffiti'
-    const words = ['重污', '油污', '泥', '清洗', '脏', '污渍', 'NO', '99%', '灰尘', '顽固']
-    dirt.push(makeDirtPatch(x, y, r, st.hp * lv[3] * rand(.85, 1.35), typeIndex, style, words[Math.floor(rand(0, words.length))]))
+    const x = area.x + rand(z.x1, z.x2) * area.w
+    const y = area.y + rand(z.y1, z.y2) * area.h
+    const perspective = .55 + (y - area.y) / area.h * .9
+    const r = rand(8, 26) * perspective * (1 + lv[3] * .05)
+    const style = Math.random() < .42 ? 'soot' : Math.random() < .7 ? 'stroke' : 'splash'
+    dirt.push(makeDirtPatch(x, y, r, st.hp * lv[3] * rand(.9, 1.45), typeIndex, style, ''))
   }
-  // 大的广告涂鸦/红色喷漆，制造截图里那种“满屏脏”的爽感
-  const big = Math.floor(4 + idx / 3)
-  for (let i = 0; i < big; i++) {
-    const x = rand(area.x + area.w * .18, area.x + area.w * .82)
-    const y = rand(area.y + area.h * .18, area.y + area.h * .78)
-    dirt.push(makeDirtPatch(x, y, rand(42, 76), 4.5 * lv[3], clamp(lv[4],0,5), 'bigGraffiti', ['脏', '污', '洗', '乱', '旧'][i % 5]))
+  // 右墙上的黑色涂鸦，贴近截图
+  const graffiti = ['X', 'DIRT', 'NO', '洗', '脏', 'SOS', '404']
+  for (let i = 0; i < 12; i++) {
+    const x = area.x + rand(.58, .95) * area.w
+    const y = area.y + rand(.15, .56) * area.h
+    dirt.push(makeDirtPatch(x, y, rand(22, 48), 3.8 * lv[3], 5, i % 3 ? 'wallGraffiti' : 'bigGraffiti', graffiti[i % graffiti.length]))
+  }
+  // 天花/角落的大面积黑灰污垢
+  for (let i = 0; i < 18; i++) {
+    const x = area.x + rand(.05, .95) * area.w
+    const y = area.y + (Math.random() < .55 ? rand(.02, .18) : rand(.48, .72)) * area.h
+    dirt.push(makeDirtPatch(x, y, rand(28, 78), 3.2 * lv[3], 2, 'soot', ''))
   }
 }
+
 function startLevel(idx) {
   currentLevel = idx; page = 'game'; activeTab = 'home'; startedAt = Date.now(); gameTime = 0; cleanRatio = 0; water = []; foamZones = []; tornado = null; spraying = false
   generateSurfaceDirt(idx)
@@ -223,8 +238,8 @@ function updateGame() {
     if (spraying) {
       const radius = gunRange(), power = gunPower()
       cleanAt(sprayX, sprayY, radius, power, 'water')
-      const nozzle = { x: W/2, y: H - 88 }
-      for (let i=0;i<5;i++) water.push({ x: nozzle.x + rand(-8,8), y: nozzle.y + rand(-4,4), vx: (sprayX-nozzle.x)/22 + rand(-1.2,1.2), vy: (sprayY-nozzle.y)/22 + rand(-1.2,1.2), r: rand(2,5), life: rand(18,30), max: 30, c: '#78DFFF' })
+      const nozzle = { x: W*.72 - 78, y: H - 91 }
+      for (let i=0;i<5;i++) water.push({ x: nozzle.x + rand(-8,8), y: nozzle.y + rand(-4,4), vx: (sprayX-nozzle.x)/22 + rand(-1.2,1.2), vy: (sprayY-nozzle.y)/22 + rand(-1.2,1.2), r: rand(2,5), life: rand(18,30), max: 30, c: '#DDF7FF' })
     }
     foamZones.forEach(f => { f.life--; cleanAt(f.x + Math.sin(frame*.04)*18, f.y + Math.cos(frame*.035)*18, f.r, gunPower()*.6, 'foam') })
     foamZones = foamZones.filter(f => f.life > 0)
@@ -235,95 +250,125 @@ function updateGame() {
   water = water.filter(p => p.life > 0)
 }
 
-function drawSurfaceScene() {
+function poly(points, fill, stroke) {
+  ctx.beginPath(); ctx.moveTo(points[0][0], points[0][1]); for (let i=1;i<points.length;i++) ctx.lineTo(points[i][0], points[i][1]); ctx.closePath(); ctx.fillStyle = fill; ctx.fill(); if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1.5; ctx.stroke() }
+}
+function drawPerspectiveScene() {
   const area = playArea(), theme = levelTheme(currentLevel)
-  ctx.save()
-  // 主清洁面板：占满屏幕中间，像参考图那样是巨物表面而不是小图标
-  const g = ctx.createLinearGradient(area.x, area.y, area.x, area.y + area.h)
-  g.addColorStop(0, theme.base1); g.addColorStop(1, theme.base2)
-  ctx.fillStyle = g; roundRect(area.x, area.y, area.w, area.h, 18); ctx.fill()
-  ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 2; ctx.stroke()
+  const ax=area.x, ay=area.y, aw=area.w, ah=area.h
+  const cx = ax + aw * .48, cy = ay + ah * .36
+  ctx.save(); ctx.beginPath(); ctx.rect(ax, ay, aw, ah); ctx.clip()
+  // 暗脏空间底色
+  const bg = ctx.createLinearGradient(0, ay, 0, ay+ah)
+  bg.addColorStop(0, '#111B22'); bg.addColorStop(.5, '#2B4854'); bg.addColorStop(1, '#B9D7D7')
+  ctx.fillStyle = bg; ctx.fillRect(ax, ay, aw, ah)
 
-  // 砖缝/金属板缝
-  ctx.save(); ctx.beginPath(); roundRect(area.x, area.y, area.w, area.h, 18); ctx.clip()
-  ctx.strokeStyle = theme.line; ctx.lineWidth = 1
-  const tile = currentLevel < 10 ? 64 : currentLevel < 15 ? 82 : 72
-  for (let x = area.x - ((frame * .08) % tile); x < area.x + area.w + tile; x += tile) { ctx.beginPath(); ctx.moveTo(x, area.y); ctx.lineTo(x, area.y + area.h); ctx.stroke() }
-  for (let y = area.y + 32; y < area.y + area.h; y += tile * .74) { ctx.beginPath(); ctx.moveTo(area.x, y); ctx.lineTo(area.x + area.w, y); ctx.stroke() }
-  // 几个凸起零件/窗口，增强巨物感
-  ctx.fillStyle = 'rgba(255,255,255,.58)'
-  for (let i=0;i<8;i++) { const x=area.x+22+(i%2)*(area.w-88)+Math.sin(i)*14, y=area.y+70+i*58; if(y<area.y+area.h-42){ roundRect(x,y,64,34,8); ctx.fill() } }
-  ctx.fillStyle = theme.accent + '55'
-  roundRect(area.x + area.w*.34, area.y + area.h*.48, area.w*.32, 28, 12); ctx.fill()
-  ctx.restore()
+  // 天花板、右墙、左墙、地面，构成 PowerWash 式第一人称空间
+  poly([[ax,ay],[ax+aw,ay],[cx+aw*.13,cy],[cx-aw*.18,cy]], '#1E2A2E', '#35474E')
+  poly([[cx+aw*.13,cy],[ax+aw,ay],[ax+aw,ay+ah*.76],[cx+aw*.03,ay+ah*.72]], '#C7C9C1', '#9FA7A4')
+  poly([[ax,ay],[cx-aw*.18,cy],[cx-aw*.28,ay+ah*.72],[ax,ay+ah*.75]], '#5A767F', '#4B6570')
+  poly([[ax,ay+ah],[ax+aw,ay+ah],[ax+aw,ay+ah*.76],[cx+aw*.03,ay+ah*.72],[cx-aw*.28,ay+ah*.72],[ax,ay+ah*.75]], '#D7E0DA', '#93AAA9')
+  // 远处走廊
+  poly([[cx-aw*.18,cy],[cx+aw*.13,cy],[cx+aw*.03,ay+ah*.72],[cx-aw*.28,ay+ah*.72]], '#344C54', '#557079')
+  poly([[cx-aw*.05,cy+ah*.04],[cx+aw*.08,cy+ah*.05],[cx+aw*.02,cy+ah*.45],[cx-aw*.11,cy+ah*.42]], '#18262C', '#4F666D')
 
-  // 远景巨物轮廓，仅作“当前关卡物体”的提示，不抢清洁表面主视觉
-  ctx.save(); ctx.globalAlpha = .13; drawObject(levels[currentLevel][2], area.x + area.w*.5, area.y + area.h*.55, Math.min(area.w*.8, 290)/330, .95); ctx.restore()
+  // 地砖透视网格
+  ctx.strokeStyle = '#5FB7C8'; ctx.lineWidth = 1.2; ctx.globalAlpha = .75
+  for (let i=0;i<12;i++) { const t=i/11; const sx=ax+aw*(.05+t*.9); ctx.beginPath(); ctx.moveTo(cx + (sx-cx)*.18, ay+ah*.72); ctx.lineTo(sx, ay+ah); ctx.stroke() }
+  for (let i=0;i<10;i++) { const y=ay+ah*(.74+i*.028+i*i*.003); if(y>ay+ah)break; ctx.beginPath(); ctx.moveTo(ax, y); ctx.lineTo(ax+aw, y); ctx.stroke() }
+  ctx.globalAlpha = 1
+
+  // 右墙瓷砖和蓝色腰线
+  ctx.strokeStyle = 'rgba(60,80,85,.28)'; ctx.lineWidth = 1
+  for(let i=0;i<9;i++){ const y=ay+ah*(.12+i*.065); ctx.beginPath(); ctx.moveTo(cx+aw*.13, y); ctx.lineTo(ax+aw, y-aw*.03); ctx.stroke() }
+  for(let i=0;i<7;i++){ const x=cx+aw*.18+i*aw*.07; ctx.beginPath(); ctx.moveTo(x, ay+ah*.1); ctx.lineTo(x+aw*.18, ay+ah*.72); ctx.stroke() }
+  ctx.fillStyle='rgba(0,122,188,.65)'; ctx.beginPath(); ctx.moveTo(cx+aw*.1, ay+ah*.46); ctx.lineTo(ax+aw, ay+ah*.39); ctx.lineTo(ax+aw, ay+ah*.47); ctx.lineTo(cx+aw*.08, ay+ah*.54); ctx.closePath(); ctx.fill()
+
+  // 左侧一排巨型待清洗物/设备，像截图的卫生间隔间
+  for(let i=0;i<4;i++){
+    const x=ax-aw*.02+i*aw*.13, y=ay+ah*(.46-i*.035), s=1-i*.13
+    ctx.fillStyle='rgba(28,139,190,.88)'; roundRect(x, y, aw*.17*s, ah*.23*s, 18*s); ctx.fill(); ctx.strokeStyle='rgba(255,255,255,.35)'; ctx.stroke()
+    ctx.fillStyle='rgba(255,255,255,.74)'; ctx.beginPath(); ctx.ellipse(x+aw*.08*s, y+ah*.18*s, aw*.095*s, ah*.035*s, 0, 0, Math.PI*2); ctx.fill()
+  }
+  // 右侧洗手台/物体
+  ctx.fillStyle='rgba(235,238,218,.9)'; ctx.beginPath(); ctx.ellipse(ax+aw*.82, ay+ah*.64, aw*.12, ah*.045, 0, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle='#7D8982'; ctx.stroke()
+  ctx.fillStyle='rgba(36,103,150,.9)'; roundRect(ax+aw*.77, ay+ah*.65, aw*.11, ah*.22, 12); ctx.fill()
+
+  // 顶部灯光和水雾
+  const light = ctx.createRadialGradient(ax+aw*.6, ay+ah*.18, 10, ax+aw*.6, ay+ah*.18, aw*.35)
+  light.addColorStop(0, 'rgba(255,255,230,.72)'); light.addColorStop(.35, 'rgba(255,255,230,.22)'); light.addColorStop(1, 'rgba(255,255,230,0)')
+  ctx.fillStyle=light; ctx.fillRect(ax,ay,aw,ah)
   ctx.restore()
 }
 function drawDirtPatch(d) {
   if (d.hp <= 0) return
-  const theme = levelTheme(currentLevel)
-  const st = stainTypes[d.type]
   const a = clamp(d.hp / d.max, 0, 1) * .96
   ctx.save(); ctx.globalAlpha = a; ctx.translate(d.x, d.y); ctx.rotate(d.rot)
-  const red = d.type >= 4 ? 'rgba(232,16,24,.92)' : d.type === 2 ? 'rgba(42,34,28,.85)' : d.type === 3 ? 'rgba(39,132,67,.78)' : theme.stain
-  if (d.style === 'stroke') {
-    ctx.strokeStyle = red; ctx.lineWidth = Math.max(5, d.r * .36); ctx.lineCap = 'round'; ctx.lineJoin = 'round'
-    ctx.beginPath(); ctx.moveTo(-d.r*d.w, rand(-2,2)); ctx.bezierCurveTo(-d.r*.45, -d.r*.9*d.h, d.r*.45, d.r*.75*d.h, d.r*d.w, rand(-2,2)); ctx.stroke()
-  } else if (d.style === 'graffiti') {
-    ctx.fillStyle = red; ctx.font = 'bold ' + Math.floor(d.r*1.25) + 'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(d.text, 0, 0)
-    ctx.strokeStyle = red; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, 0, d.r*.86, .2, Math.PI*1.55); ctx.stroke()
+  const black = d.type >= 2 ? 'rgba(8,10,10,.86)' : 'rgba(32,38,39,.62)'
+  const moss = 'rgba(23,87,48,.68)'
+  const paint = d.style === 'wallGraffiti' || d.style === 'bigGraffiti' ? 'rgba(5,12,18,.9)' : (d.type === 3 ? moss : black)
+  if (d.style === 'wallGraffiti') {
+    ctx.strokeStyle = paint; ctx.lineWidth = Math.max(3, d.r*.14); ctx.lineCap='round'; ctx.lineJoin='round'
+    ctx.font = '900 ' + Math.floor(d.r*.8) + 'px sans-serif'; ctx.fillStyle=paint; ctx.textAlign='center'; ctx.fillText(d.text, 0, 0)
+    ctx.beginPath(); ctx.moveTo(-d.r, d.r*.3); ctx.lineTo(d.r*.9, -d.r*.3); ctx.moveTo(-d.r*.7,-d.r*.45); ctx.bezierCurveTo(-d.r*.2,d.r*.2,d.r*.4,-d.r*.6,d.r*.8,d.r*.2); ctx.stroke()
   } else if (d.style === 'bigGraffiti') {
-    ctx.strokeStyle = red; ctx.lineWidth = Math.max(12, d.r*.34); ctx.lineCap='round'; ctx.lineJoin='round'
-    ctx.beginPath(); ctx.moveTo(-d.r*.9, -d.r*.5); ctx.lineTo(-d.r*.1, d.r*.15); ctx.lineTo(d.r*.8, -d.r*.65); ctx.moveTo(-d.r*.6, d.r*.62); ctx.lineTo(d.r*.7, d.r*.45); ctx.stroke()
-    ctx.fillStyle = red; ctx.font = '900 ' + Math.floor(d.r*1.05) + 'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(d.text, 0, 0)
+    ctx.strokeStyle=paint; ctx.lineWidth=Math.max(8,d.r*.25); ctx.lineCap='round'; ctx.lineJoin='round'
+    ctx.beginPath(); ctx.moveTo(-d.r*.9,-d.r*.35); ctx.lineTo(-d.r*.15,d.r*.22); ctx.lineTo(d.r*.8,-d.r*.45); ctx.moveTo(-d.r*.65,d.r*.6); ctx.lineTo(d.r*.75,d.r*.48); ctx.stroke()
+    ctx.fillStyle=paint; ctx.font='900 '+Math.floor(d.r*.9)+'px sans-serif'; ctx.textAlign='center'; ctx.fillText(d.text,0,0)
+  } else if (d.style === 'stroke') {
+    ctx.strokeStyle=paint; ctx.lineWidth=Math.max(6,d.r*.33); ctx.lineCap='round'; ctx.beginPath(); ctx.moveTo(-d.r*d.w,0); ctx.bezierCurveTo(-d.r*.45,-d.r*.75*d.h,d.r*.45,d.r*.7*d.h,d.r*d.w,0); ctx.stroke()
   } else {
-    const g = ctx.createRadialGradient(-d.r*.2, -d.r*.2, 1, 0, 0, d.r*1.45)
-    g.addColorStop(0, red); g.addColorStop(.75, red); g.addColorStop(1, 'rgba(255,0,0,0)')
-    ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(0, 0, d.r*d.w, d.r*d.h, 0, 0, Math.PI*2); ctx.fill()
-    for(let i=0;i<3;i++){ctx.beginPath();ctx.arc(rand(-d.r,d.r),rand(-d.r*.6,d.r*.6),rand(2,d.r*.22),0,Math.PI*2);ctx.fill()}
+    const g=ctx.createRadialGradient(-d.r*.2,-d.r*.2,1,0,0,d.r*1.5); g.addColorStop(0,paint); g.addColorStop(.72,paint); g.addColorStop(1,'rgba(0,0,0,0)')
+    ctx.fillStyle=g; ctx.beginPath(); ctx.ellipse(0,0,d.r*d.w,d.r*d.h,0,0,Math.PI*2); ctx.fill()
   }
   ctx.restore()
 }
 function renderGame() {
-  bg()
   topGameUI()
-  drawSurfaceScene()
+  drawPerspectiveScene()
   dirt.forEach(drawDirtPatch)
   foamZones.forEach(f => { ctx.globalAlpha = clamp(f.life/80,0,.55); ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha=1 })
   if (tornado) { const area=playArea(); ctx.save(); ctx.strokeStyle='#7EE7FF'; ctx.lineWidth=8; ctx.globalAlpha=.65; ctx.beginPath(); for(let a=0;a<Math.PI*4;a+=.25){ const r=8+a*8, x=area.x+area.w/2+Math.cos(a+tornado.a)*r, y=area.y+area.h/2+Math.sin(a+tornado.a)*r*.55; if(a===0)ctx.moveTo(x,y); else ctx.lineTo(x,y)} ctx.stroke(); ctx.restore() }
   drawSpray()
-  water.forEach(p => { ctx.save(); ctx.globalAlpha = clamp(p.life/p.max,0,1); if (p.text) { ctx.fillStyle='#2388FF'; ctx.font='bold 20px sans-serif'; ctx.textAlign='center'; ctx.fillText(p.text,p.x,p.y) } else { ctx.fillStyle=p.c; ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fill() } ctx.restore() })
+  water.forEach(p => { ctx.save(); ctx.globalAlpha = clamp(p.life/p.max,0,1); if (p.text) { ctx.fillStyle='#E9F9FF'; ctx.strokeStyle='rgba(0,30,70,.7)'; ctx.lineWidth=4; ctx.font='bold 20px sans-serif'; ctx.textAlign='center'; ctx.strokeText(p.text,p.x,p.y); ctx.fillText(p.text,p.x,p.y) } else { ctx.fillStyle=p.c; ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fill() } ctx.restore() })
   bottomGameUI()
 }
-
 function topGameUI() {
-  card(12, 12, W-24, 66, .68)
-  ctx.fillStyle = '#164A72'; ctx.font = 'bold 15px sans-serif'; ctx.textAlign='left'; ctx.fillText('Level ' + (currentLevel+1) + '  ' + levelTheme(currentLevel).title, 26, 35)
-  ctx.font = '12px sans-serif'; ctx.fillText(levels[currentLevel][1] + ' · ' + stainTypes[clamp(levels[currentLevel][4]-1,0,5)].name + '挑战', 26, 58)
-  ctx.fillStyle='rgba(22,93,150,.14)'; roundRect(W-142, 28, 102, 14, 7); ctx.fill(); ctx.fillStyle='#39D98A'; roundRect(W-142, 28, 102*cleanRatio, 14, 7); ctx.fill()
-  ctx.fillStyle='#164A72'; ctx.font='bold 13px sans-serif'; ctx.textAlign='right'; ctx.fillText(Math.floor(cleanRatio*100)+'%', W-22, 40); ctx.fillText('⏱ '+gameTime+'s', W-22, 62)
+  // 贴近参考图：左上圆形进度 + 顶部小条
+  const pct = Math.floor(cleanRatio*100)
+  ctx.save(); ctx.fillStyle='rgba(0,93,166,.9)'; ctx.beginPath(); ctx.arc(52, 45, 34, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle='#43C7FF'; ctx.lineWidth=4; ctx.stroke()
+  ctx.fillStyle='#FFFFFF'; ctx.font='bold 18px sans-serif'; ctx.textAlign='center'; ctx.fillText(pct+'%',52,44); ctx.font='bold 9px sans-serif'; ctx.fillText('CLEANED',52,58)
+  ctx.textAlign='left'; ctx.font='bold 12px sans-serif'; ctx.fillText(levelTheme(currentLevel).title, 96, 24)
+  ctx.fillStyle='rgba(0,70,120,.65)'; roundRect(96,31,132,9,5); ctx.fill(); ctx.fillStyle='#EAF6FF'; roundRect(96,31,132*cleanRatio,9,5); ctx.fill()
+  ctx.fillStyle='rgba(255,132,31,.95)'; roundRect(96,46,116,8,4); ctx.fill()
+  ctx.fillStyle='rgba(0,93,166,.9)'; roundRect(W-126, 12, 110, 32, 7); ctx.fill(); ctx.fillStyle='#FFFFFF'; ctx.textAlign='center'; ctx.font='bold 14px sans-serif'; ctx.fillText('$'+fmt(data.coins)+'.00', W-71, 33)
+  ctx.restore()
 }
 function drawSpray() {
-  const nozzle = { x: W/2, y: H-88 }
+  const nozzle = { x: W*.72, y: H-86 }
   ctx.save()
-  // 水枪
-  const tier = gunTier(); ctx.translate(nozzle.x, nozzle.y)
-  ctx.fillStyle = gunColors[tier]; ctx.strokeStyle='#13527E'; ctx.lineWidth=3; roundRect(-34, -12, 68, 24, 10); ctx.fill(); ctx.stroke(); roundRect(8, 8, 20, 34, 8); ctx.fill(); ctx.stroke(); ctx.fillStyle='#DDF8FF'; roundRect(28,-6,42,12,6); ctx.fill(); ctx.stroke()
+  // 第一人称右下水枪，尽量贴近截图构图
+  ctx.translate(nozzle.x, nozzle.y); ctx.rotate(-.28)
+  ctx.fillStyle='#B7C1CC'; ctx.strokeStyle='#5A6878'; ctx.lineWidth=3; roundRect(-20,-22,112,44,16); ctx.fill(); ctx.stroke()
+  ctx.fillStyle='#E8EDF2'; roundRect(34,-48,100,70,22); ctx.fill(); ctx.stroke()
+  ctx.fillStyle='#8896A8'; roundRect(56,-24,82,9,5); ctx.fill(); roundRect(54,-4,82,9,5); ctx.fill()
+  ctx.fillStyle='#FF7D2E'; roundRect(-8,-28,42,12,6); ctx.fill()
+  ctx.fillStyle='#DDE9F2'; roundRect(-86,-8,76,16,8); ctx.fill(); ctx.stroke()
   ctx.restore()
   if (!spraying) return
-  const g = ctx.createLinearGradient(nozzle.x, nozzle.y, sprayX, sprayY); g.addColorStop(0,'rgba(255,255,255,.75)'); g.addColorStop(1,'rgba(71,199,255,.22)')
-  ctx.strokeStyle=g; ctx.lineWidth=gunRange()*.55; ctx.lineCap='round'; ctx.beginPath(); ctx.moveTo(nozzle.x+28,nozzle.y-2); ctx.lineTo(sprayX,sprayY); ctx.stroke()
-  ctx.strokeStyle='rgba(255,255,255,.82)'; ctx.lineWidth=5; ctx.beginPath(); ctx.moveTo(nozzle.x+28,nozzle.y-2); ctx.lineTo(sprayX,sprayY); ctx.stroke()
-  ctx.fillStyle='rgba(104,221,255,.3)'; ctx.beginPath(); ctx.arc(sprayX,sprayY,gunRange(),0,Math.PI*2); ctx.fill()
+  const tip = { x: nozzle.x-78, y: nozzle.y-5 }
+  const g = ctx.createLinearGradient(tip.x, tip.y, sprayX, sprayY); g.addColorStop(0,'rgba(255,255,255,.92)'); g.addColorStop(.35,'rgba(191,235,255,.62)'); g.addColorStop(1,'rgba(255,255,255,.12)')
+  ctx.strokeStyle=g; ctx.lineWidth=16; ctx.lineCap='round'; ctx.beginPath(); ctx.moveTo(tip.x, tip.y); ctx.lineTo(sprayX, sprayY); ctx.stroke()
+  ctx.strokeStyle='rgba(255,255,255,.85)'; ctx.lineWidth=4; ctx.beginPath(); ctx.moveTo(tip.x, tip.y); ctx.lineTo(sprayX, sprayY); ctx.stroke()
+  const fog=ctx.createRadialGradient(sprayX,sprayY,4,sprayX,sprayY,gunRange()*1.8); fog.addColorStop(0,'rgba(255,255,255,.55)'); fog.addColorStop(1,'rgba(255,255,255,0)'); ctx.fillStyle=fog; ctx.beginPath(); ctx.arc(sprayX,sprayY,gunRange()*1.8,0,Math.PI*2); ctx.fill()
 }
+
 function bottomGameUI() {
-  card(12, H-116, W-24, 100, .65)
-  const skills = [['shock','冲击波'], ['foam','泡沫'], ['tornado','龙卷'], ['purify','净化']]
-  const w = (W-44)/4
-  skills.forEach((s,i)=>btn('skill_'+s[0], 22+i*w, H-101, w-8, 42, s[1], () => useSkill(s[0]), s[0]==='purify'&&cleanRatio<.9?'ghost':'blue'))
-  ctx.fillStyle='#486C82'; ctx.font='12px sans-serif'; ctx.textAlign='center'; ctx.fillText('按住屏幕持续喷水，拖动清洗污渍', W/2, H-28)
+  // 技能按钮压低、半透明，不挡第一人称场景
+  card(12, H-70, W*.52, 54, .42)
+  const skills = [['shock','冲击'], ['foam','泡沫'], ['tornado','龙卷'], ['purify','净化']]
+  const w = (W*.52-20)/4
+  skills.forEach((s,i)=>btn('skill_'+s[0], 18+i*w, H-61, w-6, 34, s[1], () => useSkill(s[0]), s[0]==='purify'&&cleanRatio<.9?'ghost':'blue'))
 }
 
 function homePage() {
