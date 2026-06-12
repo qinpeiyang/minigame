@@ -1,7 +1,7 @@
 {
   "name": "minigame",
-  "version": "2.0.3",
-  "description": "微信小游戏：巨物清洁工",
+  "version": "2.1.0",
+  "description": "微信小游戏：巨物清洁工 FPS 横屏版",
   "private": true,
   "scripts": {
     "upload": "node tools/upload.js",
