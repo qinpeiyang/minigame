@@ -47,7 +47,7 @@ const colors = {
   panel2: 'rgba(21,93,166,.72)', red: '#FF5C65', green: '#64F58A', purple: '#9D7CFF'
 }
 const evoNames = ['小丑鱼', '热带鱼', '河豚', '魔鬼鱼', '鲨鱼', '远古巨鲨']
-const evoColors = ['#FF8B2D', '#FFB532', '#D8DA74', '#8E67FF', '#2D9CDB', '#607D8B']
+const evoColors = ['#FF8B2D', '#30D5FF', '#F0D96B', '#9D7CFF', '#5B87A8', '#3E556B']
 
 const player = {
   x: 0, y: 0, r: 24, vx: 0, vy: 0, face: 1, hp: 3, maxHp: 3, name: '玩家肥鲨', blink: 0
@@ -295,21 +295,118 @@ function drawCorals() {
 }
 
 function fishShape(x, y, r, face, color, tier, label) {
-  ctx.save(); ctx.translate(x, y); ctx.scale(face, 1)
-  ctx.globalAlpha = label === 'player' && invincible > 0 && Math.floor(frame / 6) % 2 === 0 ? .55 : 1
-  ctx.fillStyle = color
-  ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 2
-  ctx.beginPath(); ctx.ellipse(0, 0, r * 1.35, r * .82, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
-  ctx.beginPath(); ctx.moveTo(-r * 1.2, 0); ctx.lineTo(-r * 2.0, -r * .62); ctx.lineTo(-r * 1.82, 0); ctx.lineTo(-r * 2.0, r * .62); ctx.closePath(); ctx.fill(); ctx.stroke()
-  ctx.fillStyle = 'rgba(255,255,255,.23)'; ctx.beginPath(); ctx.ellipse(-r * .18, -r * .22, r * .65, r * .22, -.15, 0, Math.PI * 2); ctx.fill()
-  if (tier >= 3) { ctx.fillStyle = '#E8F7FF'; for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(-r * .22 + i * r * .18, -r * .74); ctx.lineTo(-r * .05 + i * r * .18, -r * 1.12); ctx.lineTo(r * .12 + i * r * .18, -r * .72); ctx.fill() } }
-  if (tier >= 5) { ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.moveTo(r * 1.05, r * .25); ctx.lineTo(r * 1.32, r * .06); ctx.lineTo(r * 1.04, -.02); ctx.fill() }
-  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(r * .72, -r * .22, r * .22, 0, Math.PI * 2); ctx.fill()
-  ctx.fillStyle = '#0B2250'; ctx.beginPath(); ctx.arc(r * .8, -r * .21, r * .09, 0, Math.PI * 2); ctx.fill()
-  ctx.fillStyle = 'rgba(6,30,70,.25)'; ctx.beginPath(); ctx.ellipse(-r * .1, r * .1, r * .18, r * .55, .1, 0, Math.PI * 2); ctx.fill()
+  const invBlink = label === player.name && invincible > 0 && Math.floor(frame / 6) % 2 === 0
+  const swim = Math.sin(frame * .12 + x * .03) * r * .06
+  ctx.save()
+  ctx.translate(x, y + swim)
+  ctx.scale(face, 1)
+  ctx.globalAlpha = invBlink ? .55 : 1
+  ctx.lineJoin = 'round'
+  ctx.lineCap = 'round'
+
+  function fin(px, py, points, fill) {
+    ctx.fillStyle = fill
+    ctx.strokeStyle = 'rgba(5,27,60,.36)'
+    ctx.lineWidth = Math.max(1.2, r * .055)
+    ctx.beginPath()
+    ctx.moveTo(px + points[0][0] * r, py + points[0][1] * r)
+    for (let i = 1; i < points.length; i++) ctx.lineTo(px + points[i][0] * r, py + points[i][1] * r)
+    ctx.closePath(); ctx.fill(); ctx.stroke()
+  }
+  function bodyGradient(c1, c2, c3) {
+    const g = ctx.createLinearGradient(-r * 1.2, -r, r * 1.45, r)
+    g.addColorStop(0, c1); g.addColorStop(.55, c2); g.addColorStop(1, c3)
+    return g
+  }
+  function eye(ex, ey, er) {
+    ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.arc(ex, ey, er, 0, Math.PI * 2); ctx.fill()
+    ctx.fillStyle = '#082554'; ctx.beginPath(); ctx.arc(ex + er * .28, ey - er * .05, er * .42, 0, Math.PI * 2); ctx.fill()
+    ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.arc(ex + er * .43, ey - er * .28, er * .16, 0, Math.PI * 2); ctx.fill()
+  }
+  function shine() {
+    ctx.fillStyle = 'rgba(255,255,255,.28)'
+    ctx.beginPath(); ctx.ellipse(-r * .22, -r * .34, r * .7, r * .18, -.22, 0, Math.PI * 2); ctx.fill()
+  }
+
+  if (tier === 3) {
+    // 河豚：参考图那种圆滚滚卡通鱼，刺和嘴都更明显
+    ctx.fillStyle = bodyGradient('#FFF18A', '#E6C55C', '#B49438')
+    ctx.strokeStyle = 'rgba(40,45,35,.45)'; ctx.lineWidth = Math.max(2, r * .08)
+    ctx.beginPath(); ctx.ellipse(0, 0, r * 1.08, r * .96, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+    fin(-r * .95, 0, [[0,0],[-.72,-.45],[-.52,0],[-.72,.45]], '#D7B144')
+    fin(-r * .18, -r * .7, [[0,0],[-.38,-.46],[.28,-.22]], '#F5D264')
+    ctx.fillStyle = '#FFF6B3'
+    for (let i = 0; i < 14; i++) {
+      const a = i / 14 * Math.PI * 2
+      const px = Math.cos(a) * r * .78, py = Math.sin(a) * r * .68
+      ctx.beginPath(); ctx.arc(px, py, r * .055, 0, Math.PI * 2); ctx.fill()
+    }
+    eye(r * .42, -r * .22, r * .16)
+    ctx.strokeStyle = '#6A4B22'; ctx.lineWidth = Math.max(1.5, r * .045)
+    ctx.beginPath(); ctx.arc(r * .72, r * .14, r * .16, .15, Math.PI * 1.85); ctx.stroke()
+  } else if (tier === 4) {
+    // 魔鬼鱼：扁平的大翼，比普通椭圆好看很多
+    ctx.fillStyle = bodyGradient('#C8B8FF', '#8266E8', '#4E399B')
+    ctx.strokeStyle = 'rgba(22,20,70,.45)'; ctx.lineWidth = Math.max(2, r * .075)
+    ctx.beginPath()
+    ctx.moveTo(r * 1.35, 0)
+    ctx.bezierCurveTo(r * .6, -r * 1.0, -r * .75, -r * .9, -r * 1.45, -r * .1)
+    ctx.bezierCurveTo(-r * .52, -r * .25, -r * .52, r * .25, -r * 1.45, r * .1)
+    ctx.bezierCurveTo(-r * .75, r * .9, r * .6, r * 1.0, r * 1.35, 0)
+    ctx.closePath(); ctx.fill(); ctx.stroke()
+    shine(); eye(r * .46, -r * .18, r * .12)
+    ctx.strokeStyle = 'rgba(235,245,255,.55)'; ctx.lineWidth = Math.max(1, r * .035)
+    ctx.beginPath(); ctx.moveTo(-r * .2, -r * .16); ctx.quadraticCurveTo(r * .3, 0, -r * .2, r * .16); ctx.stroke()
+  } else if (tier >= 5) {
+    // 鲨鱼/巨鲨：尖头、背鳍、牙齿和鳃线
+    const dark = tier === 6 ? '#2F4358' : '#5B87A8'
+    const mid = tier === 6 ? '#55718A' : '#7FB2D0'
+    ctx.fillStyle = bodyGradient(mid, dark, '#20364D')
+    ctx.strokeStyle = 'rgba(3,18,38,.55)'; ctx.lineWidth = Math.max(2, r * .075)
+    ctx.beginPath()
+    ctx.moveTo(r * 1.7, 0)
+    ctx.bezierCurveTo(r * 1.18, -r * .58, r * .18, -r * .82, -r * 1.08, -r * .6)
+    ctx.bezierCurveTo(-r * 1.55, -r * .42, -r * 1.55, r * .42, -r * 1.08, r * .6)
+    ctx.bezierCurveTo(r * .18, r * .82, r * 1.18, r * .58, r * 1.7, 0)
+    ctx.closePath(); ctx.fill(); ctx.stroke()
+    fin(-r * 1.05, 0, [[0,0],[-.78,-.66],[-.58,0],[-.78,.66]], '#41647D')
+    fin(-r * .08, -r * .68, [[0,0],[-.28,-.78],[.44,-.2]], '#41647D')
+    fin(r * .1, r * .55, [[0,0],[-.18,.48],[.48,.14]], '#41647D')
+    ctx.fillStyle = 'rgba(255,255,255,.68)'
+    ctx.beginPath(); ctx.ellipse(r * .56, r * .28, r * .62, r * .22, -.08, 0, Math.PI * 2); ctx.fill()
+    eye(r * .75, -r * .22, r * .13)
+    ctx.strokeStyle = '#21384D'; ctx.lineWidth = Math.max(1, r * .035)
+    for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.moveTo(r * .34 - i * r * .12, -r * .08); ctx.lineTo(r * .25 - i * r * .12, r * .15); ctx.stroke() }
+    ctx.fillStyle = '#FFFFFF'
+    for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.moveTo(r * .94 + i * r * .08, r * .16); ctx.lineTo(r * 1.0 + i * r * .08, r * .31); ctx.lineTo(r * 1.08 + i * r * .08, r * .15); ctx.fill() }
+  } else {
+    // 小丑鱼/热带鱼：大色块、白边、条纹，贴近参考图的Q版风格
+    const palette = tier === 1
+      ? ['#FF9B2F', '#FF6E1F', '#D74E18', '#FFFFFF']
+      : ['#39E4FF', '#208DFF', '#1A56C8', '#FFE66D']
+    fin(-r * 1.04, 0, [[0,0],[-.72,-.55],[-.55,0],[-.72,.55]], palette[2])
+    fin(-r * .16, -r * .7, [[0,0],[-.32,-.48],[.36,-.2]], palette[2])
+    fin(-r * .03, r * .66, [[0,0],[-.18,.4],[.45,.12]], palette[2])
+    ctx.fillStyle = bodyGradient(palette[0], palette[1], palette[2])
+    ctx.strokeStyle = 'rgba(5,27,60,.45)'; ctx.lineWidth = Math.max(2, r * .08)
+    ctx.beginPath(); ctx.ellipse(0, 0, r * 1.38, r * .82, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+    if (tier === 1) {
+      ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = r * .24
+      ;[-.48, .16].forEach(px => { ctx.beginPath(); ctx.moveTo(px * r, -r * .68); ctx.quadraticCurveTo((px + .08) * r, 0, px * r, r * .68); ctx.stroke() })
+      ctx.strokeStyle = 'rgba(8,29,55,.5)'; ctx.lineWidth = r * .045
+      ;[-.62, -.34, .02, .28].forEach(px => { ctx.beginPath(); ctx.moveTo(px * r, -r * .67); ctx.quadraticCurveTo((px + .08) * r, 0, px * r, r * .67); ctx.stroke() })
+    } else {
+      ctx.fillStyle = palette[3]
+      ctx.beginPath(); ctx.moveTo(-r * .05, -r * .75); ctx.lineTo(r * .32, 0); ctx.lineTo(-r * .05, r * .75); ctx.lineTo(-r * .42, 0); ctx.closePath(); ctx.fill()
+      ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = r * .055
+      for (let i = -2; i <= 1; i++) { ctx.beginPath(); ctx.moveTo(i * r * .28, -r * .55); ctx.lineTo(i * r * .28 + r * .18, r * .55); ctx.stroke() }
+    }
+    shine(); eye(r * .72, -r * .2, r * .18)
+    ctx.fillStyle = 'rgba(7,31,68,.22)'; ctx.beginPath(); ctx.ellipse(-r * .15, r * .1, r * .17, r * .48, .15, 0, Math.PI * 2); ctx.fill()
+  }
   ctx.restore()
   if (label) {
-    ctx.save(); ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#E9FCFF'; ctx.strokeStyle = 'rgba(4,20,50,.7)'; ctx.lineWidth = 3
+    ctx.save(); ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#E9FCFF'; ctx.strokeStyle = 'rgba(4,20,50,.8)'; ctx.lineWidth = 3
     ctx.strokeText(label, x, y - r - 16); ctx.fillText(label, x, y - r - 16); ctx.restore()
   }
 }
@@ -362,10 +459,20 @@ function drawUI() {
 
 function drawControls() {
   const bx = joystick.x, by = joystick.y
-  ctx.save(); ctx.globalAlpha = .72; ctx.fillStyle = 'rgba(255,255,255,.16)'; ctx.beginPath(); ctx.arc(bx, by, 48, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.stroke()
-  ctx.fillStyle = 'rgba(255,255,255,.46)'; ctx.beginPath(); ctx.arc(bx + joystick.dx * 25, by + joystick.dy * 25, 22, 0, Math.PI * 2); ctx.fill()
+  ctx.save()
+  ctx.globalAlpha = joystick.active ? .78 : .34
+  ctx.fillStyle = 'rgba(255,255,255,.14)'; ctx.beginPath(); ctx.arc(bx, by, 48, 0, Math.PI * 2); ctx.fill()
+  ctx.strokeStyle = 'rgba(210,250,255,.55)'; ctx.lineWidth = 2; ctx.stroke()
+  ctx.fillStyle = 'rgba(255,255,255,.52)'; ctx.beginPath(); ctx.arc(bx + joystick.dx * 27, by + joystick.dy * 27, 22, 0, Math.PI * 2); ctx.fill()
+  if (!joystick.active) { ctx.fillStyle = 'rgba(235,252,255,.8)'; ctx.font = '11px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('全屏拖动控制方向', bx, by + 66) }
+  ctx.globalAlpha = 1
   const ax = W - 72, ay = H - 80
-  ctx.fillStyle = boost ? '#FFD76A' : 'rgba(255,139,45,.88)'; ctx.beginPath(); ctx.arc(ax, ay, 42, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#08346D'; ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('加速', ax, ay + 5); ctx.restore()
+  const rg = ctx.createRadialGradient(ax - 12, ay - 14, 4, ax, ay, 46)
+  rg.addColorStop(0, boost ? '#FFF3A2' : '#FFD08A'); rg.addColorStop(1, boost ? '#FFB82E' : 'rgba(255,139,45,.9)')
+  ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(ax, ay, 42, 0, Math.PI * 2); ctx.fill()
+  ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 2; ctx.stroke()
+  ctx.fillStyle = '#08346D'; ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('加速', ax, ay + 5)
+  ctx.restore()
 }
 
 function modal(title, sub, body, btn) {
@@ -379,6 +486,8 @@ function modal(title, sub, body, btn) {
 }
 
 function touchPos(t) { return { x: t.clientX, y: t.clientY } }
+function inBoostButton(p) { return dist(p.x, p.y, W - 72, H - 80) < 54 }
+function resetJoystickBase() { joystick.x = 82; joystick.y = H - 86 }
 function updateJoystick(x, y) {
   const dx = x - joystick.x, dy = y - joystick.y
   const len = Math.sqrt(dx * dx + dy * dy)
@@ -386,14 +495,23 @@ function updateJoystick(x, y) {
   joystick.dx = len > 0 ? dx / len * joystick.mag : 0
   joystick.dy = len > 0 ? dy / len * joystick.mag : 0
 }
+function startMoveTouch(t) {
+  const p = touchPos(t)
+  touchMoveId = t.identifier
+  joystick.active = true
+  // 动态摇杆：手指按在屏幕任意位置，那里就是方向控制起点。
+  joystick.x = clamp(p.x, 52, W - 52)
+  joystick.y = clamp(p.y, 86, H - 52)
+  joystick.dx = 0; joystick.dy = 0; joystick.mag = 0
+}
 
 wx.onTouchStart(e => {
   if (state !== 'playing') { reset(); startGame(); return }
   const list = e.changedTouches || e.touches || []
   for (let i = 0; i < list.length; i++) {
     const t = list[i], p = touchPos(t)
-    if (p.x < W * .55) { touchMoveId = t.identifier; joystick.active = true; updateJoystick(p.x, p.y) }
-    if (p.x > W * .62 && p.y > H * .55) { touchBoostId = t.identifier; boost = true }
+    if (inBoostButton(p)) { touchBoostId = t.identifier; boost = true; continue }
+    if (touchMoveId === null) startMoveTouch(t)
   }
 })
 wx.onTouchMove(e => {
@@ -404,11 +522,11 @@ wx.onTouchEnd(e => {
   const list = e.changedTouches || []
   for (let i = 0; i < list.length; i++) {
     const t = list[i]
-    if (t.identifier === touchMoveId) { touchMoveId = null; joystick.active = false; joystick.dx = 0; joystick.dy = 0; joystick.mag = 0 }
+    if (t.identifier === touchMoveId) { touchMoveId = null; joystick.active = false; joystick.dx = 0; joystick.dy = 0; joystick.mag = 0; resetJoystickBase() }
     if (t.identifier === touchBoostId) { touchBoostId = null; boost = false }
   }
 })
-wx.onTouchCancel(e => { touchMoveId = null; touchBoostId = null; boost = false; joystick.active = false; joystick.dx = 0; joystick.dy = 0; joystick.mag = 0 })
+wx.onTouchCancel(e => { touchMoveId = null; touchBoostId = null; boost = false; joystick.active = false; joystick.dx = 0; joystick.dy = 0; joystick.mag = 0; resetJoystickBase() })
 
 function loop() { update(); render(); nextFrame(loop) }
 try { best = Number(wx.getStorageSync('fishBestScore') || 0) } catch (e) { best = 0 }
