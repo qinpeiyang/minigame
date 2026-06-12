@@ -1,6 +1,6 @@
 {
   "name": "minigame",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "微信小游戏：巨物清洁工",
   "private": true,
   "scripts": {

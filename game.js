@@ -24,6 +24,7 @@ let touches = []
 let spraying = false
 let sprayX = 0, sprayY = 0
 let water = []
+let cleanMarks = []
 let foamZones = []
 let tornado = null
 let result = null
@@ -68,7 +69,7 @@ function resize() {
 }
 
 function gunTier() { let t = 0; for (let i = 0; i < gunMilestones.length; i++) if (data.gunLv >= gunMilestones[i]) t = i; return t }
-function gunRange() { return 20 + gunTier() * 9 + data.gunLv * .8 }
+function gunRange() { return 26 + gunTier() * 10 + data.gunLv * .9 }
 function gunPower() { return .045 + gunTier() * .026 + data.gunLv * .004 }
 function upgradeCost() { return Math.floor(180 * Math.pow(1.18, data.gunLv - 1)) }
 function addXP(x) {
@@ -202,7 +203,7 @@ function generateSurfaceDirt(idx) {
 }
 
 function startLevel(idx) {
-  currentLevel = idx; page = 'game'; activeTab = 'home'; startedAt = Date.now(); gameTime = 0; cleanRatio = 0; water = []; foamZones = []; tornado = null; spraying = false
+  currentLevel = idx; page = 'game'; activeTab = 'home'; startedAt = Date.now(); gameTime = 0; cleanRatio = 0; water = []; cleanMarks = []; foamZones = []; tornado = null; spraying = false
   generateSurfaceDirt(idx)
 }
 
@@ -210,6 +211,7 @@ function updateClean() { const sum = dirt.reduce((a, d) => a + Math.max(0, d.hp)
 function cleanAt(x, y, radius, power, kind = 'water') {
   const p = power * (kind === 'foam' ? .42 : 1)
   dirt.forEach(d => { const dd = dist(x, y, d.x, d.y); if (dd < radius + d.r) { const k = 1 - dd / (radius + d.r); d.hp = Math.max(0, d.hp - p * (0.35 + k * 1.35)) } })
+  if (kind === 'water' && frame % 2 === 0) cleanMarks.push({ x, y, r: radius * rand(.72, 1.25), life: 420, max: 420, shine: rand(.08, .18) })
 }
 function finishLevel() {
   const sec = Math.max(1, Math.floor((Date.now() - startedAt) / 1000))
@@ -248,6 +250,8 @@ function updateGame() {
   }
   water.forEach(p => { p.x += p.vx; p.y += p.vy; p.vy += .05; p.life-- })
   water = water.filter(p => p.life > 0)
+  cleanMarks.forEach(m => m.life--)
+  cleanMarks = cleanMarks.filter(m => m.life > 0).slice(-120)
 }
 
 function poly(points, fill, stroke) {
@@ -256,61 +260,86 @@ function poly(points, fill, stroke) {
 function drawPerspectiveScene() {
   const area = playArea(), theme = levelTheme(currentLevel)
   const ax=area.x, ay=area.y, aw=area.w, ah=area.h
-  const cx = ax + aw * .48, cy = ay + ah * .36
+  const cx = ax + aw * .50, cy = ay + ah * .37
   ctx.save(); ctx.beginPath(); ctx.rect(ax, ay, aw, ah); ctx.clip()
-  // 暗脏空间底色
+
+  // 先画一个偏暗、真实一点的室内清洗空间：墙面、地面、远处走廊
   const bg = ctx.createLinearGradient(0, ay, 0, ay+ah)
-  bg.addColorStop(0, '#111B22'); bg.addColorStop(.5, '#2B4854'); bg.addColorStop(1, '#B9D7D7')
+  bg.addColorStop(0, '#1B252A'); bg.addColorStop(.36, '#385560'); bg.addColorStop(.68, '#91AFAE'); bg.addColorStop(1, '#DCE4DC')
   ctx.fillStyle = bg; ctx.fillRect(ax, ay, aw, ah)
 
-  // 天花板、右墙、左墙、地面，构成 PowerWash 式第一人称空间
-  poly([[ax,ay],[ax+aw,ay],[cx+aw*.13,cy],[cx-aw*.18,cy]], '#1E2A2E', '#35474E')
-  poly([[cx+aw*.13,cy],[ax+aw,ay],[ax+aw,ay+ah*.76],[cx+aw*.03,ay+ah*.72]], '#C7C9C1', '#9FA7A4')
-  poly([[ax,ay],[cx-aw*.18,cy],[cx-aw*.28,ay+ah*.72],[ax,ay+ah*.75]], '#5A767F', '#4B6570')
-  poly([[ax,ay+ah],[ax+aw,ay+ah],[ax+aw,ay+ah*.76],[cx+aw*.03,ay+ah*.72],[cx-aw*.28,ay+ah*.72],[ax,ay+ah*.75]], '#D7E0DA', '#93AAA9')
-  // 远处走廊
-  poly([[cx-aw*.18,cy],[cx+aw*.13,cy],[cx+aw*.03,ay+ah*.72],[cx-aw*.28,ay+ah*.72]], '#344C54', '#557079')
-  poly([[cx-aw*.05,cy+ah*.04],[cx+aw*.08,cy+ah*.05],[cx+aw*.02,cy+ah*.45],[cx-aw*.11,cy+ah*.42]], '#18262C', '#4F666D')
+  // 天花板、左右墙、地面，透视更强
+  poly([[ax,ay],[ax+aw,ay],[cx+aw*.18,cy],[cx-aw*.24,cy]], '#20292D', '#43535A')
+  poly([[cx+aw*.18,cy],[ax+aw,ay],[ax+aw,ay+ah*.78],[cx+aw*.04,ay+ah*.73]], '#BFC7C2', '#7E8C8C')
+  poly([[ax,ay],[cx-aw*.24,cy],[cx-aw*.31,ay+ah*.73],[ax,ay+ah*.76]], '#62818A', '#3F5963')
+  poly([[ax,ay+ah],[ax+aw,ay+ah],[ax+aw,ay+ah*.78],[cx+aw*.04,ay+ah*.73],[cx-aw*.31,ay+ah*.73],[ax,ay+ah*.76]], '#D8DFD6', '#899F9E')
+  poly([[cx-aw*.24,cy],[cx+aw*.18,cy],[cx+aw*.04,ay+ah*.73],[cx-aw*.31,ay+ah*.73]], '#2B4149', '#526C73')
 
-  // 地砖透视网格
-  ctx.strokeStyle = '#5FB7C8'; ctx.lineWidth = 1.2; ctx.globalAlpha = .75
-  for (let i=0;i<12;i++) { const t=i/11; const sx=ax+aw*(.05+t*.9); ctx.beginPath(); ctx.moveTo(cx + (sx-cx)*.18, ay+ah*.72); ctx.lineTo(sx, ay+ah); ctx.stroke() }
-  for (let i=0;i<10;i++) { const y=ay+ah*(.74+i*.028+i*i*.003); if(y>ay+ah)break; ctx.beginPath(); ctx.moveTo(ax, y); ctx.lineTo(ax+aw, y); ctx.stroke() }
-  ctx.globalAlpha = 1
+  // 远处黑门/走廊，增强纵深
+  poly([[cx-aw*.06,cy+ah*.035],[cx+aw*.10,cy+ah*.045],[cx+aw*.03,cy+ah*.47],[cx-aw*.13,cy+ah*.43]], '#121D22', '#52666E')
+  ctx.fillStyle='rgba(120,190,210,.12)'; roundRect(cx-aw*.035, cy+ah*.075, aw*.075, ah*.22, 4); ctx.fill()
 
-  // 右墙瓷砖和蓝色腰线
-  ctx.strokeStyle = 'rgba(60,80,85,.28)'; ctx.lineWidth = 1
-  for(let i=0;i<9;i++){ const y=ay+ah*(.12+i*.065); ctx.beginPath(); ctx.moveTo(cx+aw*.13, y); ctx.lineTo(ax+aw, y-aw*.03); ctx.stroke() }
-  for(let i=0;i<7;i++){ const x=cx+aw*.18+i*aw*.07; ctx.beginPath(); ctx.moveTo(x, ay+ah*.1); ctx.lineTo(x+aw*.18, ay+ah*.72); ctx.stroke() }
-  ctx.fillStyle='rgba(0,122,188,.65)'; ctx.beginPath(); ctx.moveTo(cx+aw*.1, ay+ah*.46); ctx.lineTo(ax+aw, ay+ah*.39); ctx.lineTo(ax+aw, ay+ah*.47); ctx.lineTo(cx+aw*.08, ay+ah*.54); ctx.closePath(); ctx.fill()
+  // 地砖透视线
+  ctx.strokeStyle = 'rgba(58,135,155,.55)'; ctx.lineWidth = 1.2
+  for (let i=0;i<13;i++) { const t=i/12; const sx=ax+aw*(.03+t*.94); ctx.beginPath(); ctx.moveTo(cx + (sx-cx)*.16, ay+ah*.73); ctx.lineTo(sx, ay+ah); ctx.stroke() }
+  for (let i=0;i<11;i++) { const y=ay+ah*(.75+i*.024+i*i*.0038); if(y>ay+ah)break; ctx.beginPath(); ctx.moveTo(ax, y); ctx.lineTo(ax+aw, y); ctx.stroke() }
 
-  // 左侧一排巨型待清洗物/设备，像截图的卫生间隔间
+  // 右墙瓷砖 + 蓝色腰线，接近截图中墙体结构
+  ctx.save(); ctx.beginPath(); ctx.moveTo(cx+aw*.18,cy); ctx.lineTo(ax+aw,ay); ctx.lineTo(ax+aw,ay+ah*.78); ctx.lineTo(cx+aw*.04,ay+ah*.73); ctx.closePath(); ctx.clip()
+  ctx.strokeStyle = 'rgba(50,70,75,.22)'; ctx.lineWidth = 1
+  for(let i=0;i<13;i++){ const y=ay+ah*(.08+i*.055); ctx.beginPath(); ctx.moveTo(cx+aw*.15, y+ah*.03); ctx.lineTo(ax+aw, y-aw*.035); ctx.stroke() }
+  for(let i=0;i<9;i++){ const x=cx+aw*.16+i*aw*.065; ctx.beginPath(); ctx.moveTo(x, ay+ah*.06); ctx.lineTo(x+aw*.24, ay+ah*.78); ctx.stroke() }
+  const belt=ctx.createLinearGradient(cx+aw*.08,0,ax+aw,0); belt.addColorStop(0,'rgba(9,91,150,.45)'); belt.addColorStop(1,'rgba(0,145,215,.85)')
+  ctx.fillStyle=belt; ctx.beginPath(); ctx.moveTo(cx+aw*.1, ay+ah*.455); ctx.lineTo(ax+aw, ay+ah*.385); ctx.lineTo(ax+aw, ay+ah*.49); ctx.lineTo(cx+aw*.07, ay+ah*.56); ctx.closePath(); ctx.fill()
+  ctx.restore()
+
+  // 左侧隔间/巨大物体阵列，带半真实阴影
   for(let i=0;i<4;i++){
-    const x=ax-aw*.02+i*aw*.13, y=ay+ah*(.46-i*.035), s=1-i*.13
-    ctx.fillStyle='rgba(28,139,190,.88)'; roundRect(x, y, aw*.17*s, ah*.23*s, 18*s); ctx.fill(); ctx.strokeStyle='rgba(255,255,255,.35)'; ctx.stroke()
-    ctx.fillStyle='rgba(255,255,255,.74)'; ctx.beginPath(); ctx.ellipse(x+aw*.08*s, y+ah*.18*s, aw*.095*s, ah*.035*s, 0, 0, Math.PI*2); ctx.fill()
+    const x=ax-aw*.05+i*aw*.135, y=ay+ah*(.43-i*.032), sc=1-i*.12
+    const cg=ctx.createLinearGradient(x,y,x,y+ah*.27*sc); cg.addColorStop(0,'#2BB7E8'); cg.addColorStop(1,'#0A6EA6')
+    ctx.fillStyle=cg; roundRect(x, y, aw*.18*sc, ah*.255*sc, 18*sc); ctx.fill(); ctx.strokeStyle='rgba(255,255,255,.32)'; ctx.lineWidth=2; ctx.stroke()
+    ctx.fillStyle='rgba(255,255,255,.75)'; ctx.beginPath(); ctx.ellipse(x+aw*.09*sc, y+ah*.19*sc, aw*.096*sc, ah*.036*sc, 0, 0, Math.PI*2); ctx.fill()
+    ctx.fillStyle='rgba(0,30,70,.18)'; ctx.fillRect(x+aw*.16*sc, y+8, 8, ah*.23*sc)
   }
-  // 右侧洗手台/物体
-  ctx.fillStyle='rgba(235,238,218,.9)'; ctx.beginPath(); ctx.ellipse(ax+aw*.82, ay+ah*.64, aw*.12, ah*.045, 0, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle='#7D8982'; ctx.stroke()
-  ctx.fillStyle='rgba(36,103,150,.9)'; roundRect(ax+aw*.77, ay+ah*.65, aw*.11, ah*.22, 12); ctx.fill()
 
-  // 顶部灯光和水雾
-  const light = ctx.createRadialGradient(ax+aw*.6, ay+ah*.18, 10, ax+aw*.6, ay+ah*.18, aw*.35)
-  light.addColorStop(0, 'rgba(255,255,230,.72)'); light.addColorStop(.35, 'rgba(255,255,230,.22)'); light.addColorStop(1, 'rgba(255,255,230,0)')
+  // 右下洗手台/设备，和水枪同侧形成截图构图
+  ctx.fillStyle='rgba(245,245,225,.92)'; ctx.beginPath(); ctx.ellipse(ax+aw*.82, ay+ah*.64, aw*.13, ah*.047, 0, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle='#7B8984'; ctx.lineWidth=2; ctx.stroke()
+  ctx.fillStyle='rgba(30,104,151,.95)'; roundRect(ax+aw*.765, ay+ah*.65, aw*.118, ah*.23, 12); ctx.fill()
+  ctx.fillStyle='rgba(255,255,255,.32)'; roundRect(ax+aw*.785, ay+ah*.665, aw*.07, ah*.026, 7); ctx.fill()
+
+  // 已清洗区域：亮色湿润补丁，会跟着喷水留下更明显的“洗干净”痕迹
+  cleanMarks.forEach(m => {
+    const a = clamp(m.life / m.max, 0, 1)
+    const g=ctx.createRadialGradient(m.x, m.y, 2, m.x, m.y, m.r)
+    g.addColorStop(0, `rgba(245,255,255,${.34*a})`); g.addColorStop(.65, `rgba(194,240,255,${.18*a})`); g.addColorStop(1, 'rgba(255,255,255,0)')
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(m.x,m.y,m.r,0,Math.PI*2); ctx.fill()
+  })
+
+  // 灯光、暗角、水雾，增强 3D 游戏截图感
+  const light = ctx.createRadialGradient(ax+aw*.58, ay+ah*.18, 8, ax+aw*.58, ay+ah*.18, aw*.38)
+  light.addColorStop(0, 'rgba(255,255,225,.62)'); light.addColorStop(.35, 'rgba(255,255,225,.18)'); light.addColorStop(1, 'rgba(255,255,225,0)')
   ctx.fillStyle=light; ctx.fillRect(ax,ay,aw,ah)
+  const vig=ctx.createRadialGradient(ax+aw*.55,ay+ah*.48,aw*.15,ax+aw*.55,ay+ah*.5,aw*.72)
+  vig.addColorStop(0,'rgba(0,0,0,0)'); vig.addColorStop(1,'rgba(0,10,20,.34)')
+  ctx.fillStyle=vig; ctx.fillRect(ax,ay,aw,ah)
   ctx.restore()
 }
+
 function drawDirtPatch(d) {
   if (d.hp <= 0) return
   const a = clamp(d.hp / d.max, 0, 1) * .96
   ctx.save(); ctx.globalAlpha = a; ctx.translate(d.x, d.y); ctx.rotate(d.rot)
-  const black = d.type >= 2 ? 'rgba(8,10,10,.86)' : 'rgba(32,38,39,.62)'
-  const moss = 'rgba(23,87,48,.68)'
-  const paint = d.style === 'wallGraffiti' || d.style === 'bigGraffiti' ? 'rgba(5,12,18,.9)' : (d.type === 3 ? moss : black)
+  const black = d.type >= 2 ? 'rgba(4,6,6,.88)' : 'rgba(35,41,40,.64)'
+  const moss = 'rgba(18,86,44,.70)'
+  const mud = 'rgba(82,54,33,.72)'
+  const paint = d.style === 'wallGraffiti' || d.style === 'bigGraffiti' ? 'rgba(3,8,12,.92)' : (d.type === 3 ? moss : d.type === 1 ? mud : black)
+  ctx.shadowColor='rgba(0,0,0,.28)'; ctx.shadowBlur=3
   if (d.style === 'wallGraffiti') {
     ctx.strokeStyle = paint; ctx.lineWidth = Math.max(3, d.r*.14); ctx.lineCap='round'; ctx.lineJoin='round'
-    ctx.font = '900 ' + Math.floor(d.r*.8) + 'px sans-serif'; ctx.fillStyle=paint; ctx.textAlign='center'; ctx.fillText(d.text, 0, 0)
+    ctx.font = '900 ' + Math.floor(d.r*.82) + 'px sans-serif'; ctx.fillStyle=paint; ctx.textAlign='center'; ctx.fillText(d.text, 0, 0)
     ctx.beginPath(); ctx.moveTo(-d.r, d.r*.3); ctx.lineTo(d.r*.9, -d.r*.3); ctx.moveTo(-d.r*.7,-d.r*.45); ctx.bezierCurveTo(-d.r*.2,d.r*.2,d.r*.4,-d.r*.6,d.r*.8,d.r*.2); ctx.stroke()
+    // 油漆下垂
+    for(let i=0;i<3;i++){ const x=-d.r*.5+i*d.r*.45; ctx.beginPath(); ctx.moveTo(x,d.r*.1); ctx.lineTo(x+rand(-3,3),d.r*rand(.55,1.25)); ctx.stroke() }
   } else if (d.style === 'bigGraffiti') {
     ctx.strokeStyle=paint; ctx.lineWidth=Math.max(8,d.r*.25); ctx.lineCap='round'; ctx.lineJoin='round'
     ctx.beginPath(); ctx.moveTo(-d.r*.9,-d.r*.35); ctx.lineTo(-d.r*.15,d.r*.22); ctx.lineTo(d.r*.8,-d.r*.45); ctx.moveTo(-d.r*.65,d.r*.6); ctx.lineTo(d.r*.75,d.r*.48); ctx.stroke()
@@ -318,11 +347,13 @@ function drawDirtPatch(d) {
   } else if (d.style === 'stroke') {
     ctx.strokeStyle=paint; ctx.lineWidth=Math.max(6,d.r*.33); ctx.lineCap='round'; ctx.beginPath(); ctx.moveTo(-d.r*d.w,0); ctx.bezierCurveTo(-d.r*.45,-d.r*.75*d.h,d.r*.45,d.r*.7*d.h,d.r*d.w,0); ctx.stroke()
   } else {
-    const g=ctx.createRadialGradient(-d.r*.2,-d.r*.2,1,0,0,d.r*1.5); g.addColorStop(0,paint); g.addColorStop(.72,paint); g.addColorStop(1,'rgba(0,0,0,0)')
+    const g=ctx.createRadialGradient(-d.r*.2,-d.r*.2,1,0,0,d.r*1.55); g.addColorStop(0,paint); g.addColorStop(.68,paint); g.addColorStop(1,'rgba(0,0,0,0)')
     ctx.fillStyle=g; ctx.beginPath(); ctx.ellipse(0,0,d.r*d.w,d.r*d.h,0,0,Math.PI*2); ctx.fill()
+    ctx.fillStyle='rgba(0,0,0,.28)'; for(let i=0;i<2;i++){ctx.beginPath();ctx.arc(rand(-d.r,d.r),rand(-d.r*.5,d.r*.6),rand(2,d.r*.18),0,Math.PI*2);ctx.fill()}
   }
   ctx.restore()
 }
+
 function renderGame() {
   topGameUI()
   drawPerspectiveScene()
