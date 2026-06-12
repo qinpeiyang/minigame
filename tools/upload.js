@@ -4,7 +4,7 @@ const ci = require('miniprogram-ci')
 const root = path.resolve(__dirname, '..')
 const appid = 'wxcafe441891f7a49f'
 const version = process.env.VERSION || require('../package.json').version
-const desc = process.env.DESC || `体验版：鱼吃鱼进化生存 v${version}`
+const desc = process.env.DESC || `体验版：锤子登山 v${version}`
 
 const project = new ci.Project({
   appid,

@@ -1,7 +1,7 @@
 {
   "name": "minigame",
-  "version": "1.1.2",
-  "description": "微信小游戏：鱼吃鱼进化生存大作战",
+  "version": "1.2.0",
+  "description": "微信小游戏：锤子登山",
   "private": true,
   "scripts": {
     "upload": "node tools/upload.js",
