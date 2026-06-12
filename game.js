@@ -1,5 +1,5 @@
-/* 锤子登山：参考“掘地求升”的单指物理攀爬小游戏
- * 拖动屏幕控制锤子方向和力度，锤头碰到石头会把角色反推上去；掉下去不死，但高度会丢。
+/* 星球钩爪：单指物理攀爬小游戏
+ * 拖动屏幕控制伸缩磁力钩方向和力度，钩头顶住地形会把角色反推上去；掉下去不死，但高度会丢。
  */
 const canvas = wx.createCanvas()
 const ctx = canvas.getContext('2d')
@@ -92,8 +92,8 @@ function reset() {
   buildLevel()
   for (let i = 0; i < 14; i++) clouds.push({ x: rand(0, world.w), y: rand(120, world.h - 600), s: rand(.55, 1.4), v: rand(.08, .22) })
   for (let i = 0; i < 60; i++) stars.push({ x: rand(0, world.w), y: rand(0, 900), r: rand(.8, 2.2), a: rand(.25, .9) })
-  addTip('拖动屏幕挥锤', 450, world.h - 430)
-  addTip('锤头顶住石头，把自己撬上去', 535, 3090)
+  addTip('拖动屏幕控制磁力钩', 450, world.h - 430)
+  addTip('钩头卡住支点，把自己弹上去', 535, 3090)
   addTip('别急，慢慢找支点', 360, 1760)
   addTip('上面就是终点', 450, 390)
 }
@@ -160,7 +160,7 @@ function update() {
   player.vx *= .992
   player.vy *= .995
 
-  // 锤头接触石头：越快速挥锤，反推越强
+  // 磁力钩头接触地形：越快速甩动，反推越强
   const hh = hammerHead()
   let hit = null
   for (const r of rocks) {
@@ -247,26 +247,68 @@ function drawRock(r) {
 function drawPlayer() {
   const x = screenX(player.x), y = screenY(player.y)
   const hh = hammerHead(); const hx = screenX(hh.x), hy = screenY(hh.y)
-  // 锤子杆
-  ctx.save(); ctx.strokeStyle = '#6B4326'; ctx.lineWidth = 8; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(x, y - 10); ctx.lineTo(hx, hy); ctx.stroke()
-  ctx.strokeStyle = '#D7A15F'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x, y - 10); ctx.lineTo(hx, hy); ctx.stroke()
-  // 锤头
-  ctx.translate(hx, hy); ctx.rotate(player.hammerA + Math.PI / 2); ctx.fillStyle = player.grip ? '#FFD36D' : '#B7C4CC'; ctx.strokeStyle = '#52616A'; ctx.lineWidth = 2; roundRect(-24, -10, 48, 20, 6); ctx.fill(); ctx.stroke(); ctx.restore()
 
-  // 罐子/锅
+  // 伸缩磁力钩：保留“物理支点攀爬”的类型，但视觉不照搬锤子/锅
+  ctx.save()
+  ctx.strokeStyle = 'rgba(12,38,76,.38)'; ctx.lineWidth = 12; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(x, y - 6); ctx.lineTo(hx, hy); ctx.stroke()
+  const cable = ctx.createLinearGradient(x, y, hx, hy)
+  cable.addColorStop(0, '#F7FAFF'); cable.addColorStop(.45, '#78D9FF'); cable.addColorStop(1, player.grip ? '#FFE36C' : '#37A8FF')
+  ctx.strokeStyle = cable; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(x, y - 6); ctx.lineTo(hx, hy); ctx.stroke()
+  ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x + 3, y - 9); ctx.lineTo(hx + 3, hy - 3); ctx.stroke()
+
+  // 钩头/磁吸盘
+  ctx.translate(hx, hy); ctx.rotate(player.hammerA)
+  const hookGlow = player.grip ? '#FFD84D' : '#69E6FF'
+  ctx.shadowColor = hookGlow; ctx.shadowBlur = player.grip ? 18 : 8
+  ctx.fillStyle = player.grip ? '#FFE36C' : '#8FEAFF'
+  ctx.strokeStyle = '#135A96'; ctx.lineWidth = 2.5
+  ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+  ctx.shadowBlur = 0
+  ctx.fillStyle = '#1768A6'; ctx.fillRect(-4, -19, 8, 10)
+  ctx.strokeStyle = player.grip ? '#FFF0A0' : '#DDFBFF'; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(0, 0, 24, -1.05, 1.05); ctx.stroke()
+  ctx.strokeStyle = '#135A96'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, 0, 24, -1.05, 1.05); ctx.stroke()
+  ctx.restore()
+
+  // 主角：小型星际维修胶囊/机器人，不再是锅和人
   ctx.save(); ctx.translate(x, y)
-  const pot = ctx.createLinearGradient(0, 0, 0, 38); pot.addColorStop(0, '#7ED1FF'); pot.addColorStop(1, '#1F74AF')
-  ctx.fillStyle = pot; ctx.strokeStyle = '#0B3B65'; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(0, 20, 25, 18, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
-  ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.beginPath(); ctx.ellipse(-8, 14, 10, 5, -.2, 0, Math.PI*2); ctx.fill()
-  // 人身和头
-  ctx.fillStyle = '#F2B07D'; ctx.beginPath(); ctx.arc(0, -18, 17, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle = '#6D3C26'; ctx.lineWidth = 2; ctx.stroke()
-  ctx.fillStyle = '#5B321F'; ctx.beginPath(); ctx.ellipse(-2, -29, 18, 9, -.2, Math.PI, Math.PI*2); ctx.fill()
-  ctx.fillStyle = '#1B2744'; ctx.beginPath(); ctx.arc(-5, -19, 2, 0, Math.PI*2); ctx.arc(7, -19, 2, 0, Math.PI*2); ctx.fill()
-  ctx.strokeStyle = '#8B4D32'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(1, -12, 6, .15, Math.PI - .15); ctx.stroke()
-  // 胳膊
-  ctx.strokeStyle = '#F2B07D'; ctx.lineWidth = 8; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(-10, -2); ctx.lineTo(Math.cos(player.hammerA) * 28, Math.sin(player.hammerA) * 28 - 8); ctx.stroke()
+  // 喷气尾焰
+  const thrust = Math.min(1, Math.abs(player.vx) * .04 + Math.max(0, player.vy) * .025)
+  if (thrust > .08) {
+    ctx.globalAlpha = .55 + thrust * .35
+    ctx.fillStyle = '#FFB13B'; ctx.beginPath(); ctx.moveTo(-10, 30); ctx.quadraticCurveTo(0, 50 + thrust * 18, 10, 30); ctx.closePath(); ctx.fill()
+    ctx.fillStyle = '#FFF19A'; ctx.beginPath(); ctx.moveTo(-5, 30); ctx.quadraticCurveTo(0, 42 + thrust * 12, 5, 30); ctx.closePath(); ctx.fill()
+    ctx.globalAlpha = 1
+  }
+
+  // 胶囊身体
+  const body = ctx.createLinearGradient(-22, -30, 24, 34)
+  body.addColorStop(0, '#FFFFFF'); body.addColorStop(.45, '#72D9FF'); body.addColorStop(1, '#2079D6')
+  ctx.shadowColor = 'rgba(0,28,74,.28)'; ctx.shadowBlur = 12; ctx.shadowOffsetY = 5
+  ctx.fillStyle = body; ctx.strokeStyle = '#0B3F87'; ctx.lineWidth = 3
+  roundRect(-24, -34, 48, 68, 23); ctx.fill(); ctx.stroke()
+  ctx.shadowBlur = 0
+
+  // 玻璃面罩
+  const glass = ctx.createRadialGradient(-6, -13, 3, 0, -8, 24)
+  glass.addColorStop(0, '#FFFFFF'); glass.addColorStop(.28, '#C8FAFF'); glass.addColorStop(1, '#1777D7')
+  ctx.fillStyle = glass; ctx.strokeStyle = '#0B3F87'; ctx.lineWidth = 2
+  ctx.beginPath(); ctx.ellipse(0, -10, 20, 16, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+  ctx.fillStyle = '#082B5F'; ctx.beginPath(); ctx.arc(-7, -10, 2.5, 0, Math.PI * 2); ctx.arc(7, -10, 2.5, 0, Math.PI * 2); ctx.fill()
+  ctx.strokeStyle = '#08356F'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, -4, 6, .2, Math.PI - .2); ctx.stroke()
+  ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.beginPath(); ctx.ellipse(-8, -17, 7, 3, -.3, 0, Math.PI * 2); ctx.fill()
+
+  // 机械臂连接点
+  ctx.fillStyle = '#FFE36C'; ctx.strokeStyle = '#0B3F87'; ctx.lineWidth = 2
+  ctx.beginPath(); ctx.arc(Math.cos(player.hammerA) * 19, Math.sin(player.hammerA) * 19 - 3, 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+
+  // 两侧小推进器
+  ctx.fillStyle = '#1556A0'; ctx.strokeStyle = '#0B3F87'; ctx.lineWidth = 2
+  roundRect(-34, 2, 14, 25, 7); ctx.fill(); ctx.stroke()
+  roundRect(20, 2, 14, 25, 7); ctx.fill(); ctx.stroke()
+  ctx.fillStyle = '#9AEFFF'; ctx.beginPath(); ctx.arc(-27, 16, 3, 0, Math.PI * 2); ctx.arc(27, 16, 3, 0, Math.PI * 2); ctx.fill()
   ctx.restore()
 }
+
 
 function drawUI() {
   const h = heightNow()
@@ -282,8 +324,8 @@ function drawUI() {
     ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 2; ctx.setLineDash([6, 5]); ctx.beginPath(); ctx.moveTo(W/2, screenY(player.y)); ctx.lineTo(target.x, target.y); ctx.stroke(); ctx.setLineDash([])
     ctx.fillStyle = 'rgba(255,255,255,.18)'; ctx.beginPath(); ctx.arc(target.x, target.y, 26, 0, Math.PI*2); ctx.fill()
   }
-  if (state === 'ready') modal('锤子登山', '拖动控制锤子，找支点把自己撬上去\n掉下去也别急，重新爬！', '点击开始')
-  if (state === 'win') modal('登顶成功！', '最高高度 ' + bestHeight + 'm\n这把有点“掘”！', '再来一局')
+  if (state === 'ready') modal('星球钩爪', '拖动控制磁力钩，借支点向上攀爬\n掉下去也别急，重新找节奏！', '点击开始')
+  if (state === 'win') modal('抵达信标！', '最高高度 ' + bestHeight + 'm\n钩爪操作拉满！', '再来一局')
   ctx.restore()
 }
 function modal(title, body, btn) {

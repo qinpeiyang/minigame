@@ -1,7 +1,7 @@
 {
   "name": "minigame",
-  "version": "1.2.0",
-  "description": "微信小游戏：锤子登山",
+  "version": "1.2.1",
+  "description": "微信小游戏：星球钩爪",
   "private": true,
   "scripts": {
     "upload": "node tools/upload.js",
