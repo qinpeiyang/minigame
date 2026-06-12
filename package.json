@@ -1,0 +1,13 @@
+{
+  "name": "minigame",
+  "version": "1.0.0",
+  "description": "微信小游戏：元气小鸡跳跳",
+  "private": true,
+  "scripts": {
+    "upload": "node tools/upload.js",
+    "check": "node tools/check.js"
+  },
+  "devDependencies": {
+    "miniprogram-ci": "^2.1.31"
+  }
+}
