@@ -1,369 +1,311 @@
-/* 星球钩爪：单指物理攀爬小游戏
- * 拖动屏幕控制伸缩磁力钩方向和力度，钩头顶住地形会把角色反推上去；掉下去不死，但高度会丢。
+/* 巨物清洁工 - 微信小游戏 V1.0 原型
+ * 休闲解压 + 模拟经营 + 收集成长
+ * 按住喷水，拖动清洗污渍；100% 清洁通关，金币升级水枪，解锁 20 个巨物关卡。
  */
 const canvas = wx.createCanvas()
 const ctx = canvas.getContext('2d')
 
-function info() { try { return wx.getSystemInfoSync() || {} } catch (e) { return {} } }
-function nextFrame(cb) {
-  const raf = (typeof requestAnimationFrame === 'function' && requestAnimationFrame)
+function sys() { try { return wx.getSystemInfoSync() || {} } catch (e) { return {} } }
+function raf(cb) {
+  const f = (typeof requestAnimationFrame === 'function' && requestAnimationFrame)
     || (canvas && typeof canvas.requestAnimationFrame === 'function' && canvas.requestAnimationFrame.bind(canvas))
     || (typeof wx !== 'undefined' && typeof wx.requestAnimationFrame === 'function' && wx.requestAnimationFrame.bind(wx))
-  return raf ? raf(cb) : setTimeout(cb, 1000 / 60)
+  return f ? f(cb) : setTimeout(cb, 1000 / 60)
 }
-function rand(a, b) { return a + Math.random() * (b - a) }
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)) }
-function len(x, y) { return Math.sqrt(x * x + y * y) }
+function rand(a, b) { return a + Math.random() * (b - a) }
 function dist(ax, ay, bx, by) { const x = ax - bx, y = ay - by; return Math.sqrt(x * x + y * y) }
+function fmt(n) { return n >= 10000 ? (n / 10000).toFixed(1) + '万' : String(Math.floor(n)) }
 
-let W = 375, H = 667, DPR = 1
-let state = 'ready'
-let frame = 0
-let cameraY = 0
-let bestHeight = 0
-let lastHeight = 0
-let dragging = false
-let touchId = null
-let target = { x: 0, y: 0 }
-let particles = []
-let clouds = []
-let stars = []
-let rocks = []
-let tips = []
+let W = 375, H = 667, DPR = 1, frame = 0
+let page = 'home' // home | levels | equip | tasks | rank | shop | game | result
+let activeTab = 'home'
+let touches = []
+let spraying = false
+let sprayX = 0, sprayY = 0
+let water = []
+let foamZones = []
+let tornado = null
+let result = null
+let startedAt = 0
+let gameTime = 0
+let currentLevel = 0
+let dirt = []
+let cleanRatio = 0
+let buttons = []
 
-const world = { w: 900, h: 5200 }
-const player = {
-  x: 450, y: 4920, vx: 0, vy: 0, r: 22,
-  hammerA: -Math.PI * .55, targetA: -Math.PI * .55, hammerLen: 94,
-  grip: 0, mood: 0
+const levels = [
+  ['自行车', '街头清洁', 'bike', 1, 1], ['电动车', '街头清洁', 'scooter', 1.12, 1], ['摩托车', '街头清洁', 'motor', 1.22, 2], ['汽车', '街头清洁', 'car', 1.35, 2], ['公交车', '街头清洁', 'bus', 1.55, 3],
+  ['小卖部', '建筑清洁', 'shop', 1.45, 2], ['别墅', '建筑清洁', 'villa', 1.6, 3], ['写字楼', '建筑清洁', 'office', 1.78, 3], ['商场', '建筑清洁', 'mall', 1.9, 4], ['摩天大楼', '建筑清洁', 'tower', 2.15, 4],
+  ['挖掘机', '工业清洁', 'excavator', 1.9, 4], ['集装箱', '工业清洁', 'container', 2.05, 4], ['港口吊机', '工业清洁', 'crane', 2.25, 5], ['游轮', '工业清洁', 'ship', 2.45, 5], ['飞机', '工业清洁', 'plane', 2.6, 5],
+  ['狮身人面像', '世界奇观', 'sphinx', 2.5, 5], ['金字塔', '世界奇观', 'pyramid', 2.65, 5], ['长城', '世界奇观', 'wall', 2.8, 6], ['埃菲尔铁塔', '世界奇观', 'eiffel', 3.0, 6], ['空间站', '世界奇观', 'station', 3.2, 6]
+]
+const stainTypes = [
+  { name: '灰尘', hp: 1.0, color: 'rgba(80,87,92,.68)', reward: 1 },
+  { name: '泥巴', hp: 1.55, color: 'rgba(116,74,37,.75)', reward: 2 },
+  { name: '油污', hp: 2.3, color: 'rgba(34,31,29,.78)', reward: 3 },
+  { name: '青苔', hp: 2.0, color: 'rgba(33,121,66,.72)', reward: 3 },
+  { name: '涂鸦', hp: 2.7, color: 'rgba(224,55,143,.68)', reward: 4 },
+  { name: '顽固污垢', hp: 3.5, color: 'rgba(55,37,28,.85)', reward: 6 }
+]
+const gunNames = ['普通喷枪', '强压喷枪', '涡轮喷枪', '激光水炮', '超级银河喷枪']
+const gunMilestones = [1, 5, 10, 20, 30]
+const gunColors = ['#4FC3FF', '#35DDA2', '#FFB33D', '#9F7CFF', '#FF68D2']
+let data = {
+  coins: 800, diamonds: 20, playerLv: 1, xp: 0, gunLv: 1, unlocked: 1, totalArea: 0,
+  finished: {}, daily: { clean3: 0, area500: 0, ad: 0 }, skin: 0
 }
 
+function load() {
+  try { const d = wx.getStorageSync('giantCleaner'); if (d) data = Object.assign(data, d) } catch (e) {}
+}
+function save() { try { wx.setStorageSync('giantCleaner', data) } catch (e) {} }
 function resize() {
-  const s = info(); W = s.windowWidth || W; H = s.windowHeight || H; DPR = Math.max(1, s.pixelRatio || 1)
+  const s = sys(); W = s.windowWidth || W; H = s.windowHeight || H; DPR = Math.max(1, s.pixelRatio || 1)
   canvas.width = Math.floor(W * DPR); canvas.height = Math.floor(H * DPR)
   if (canvas.style) { canvas.style.width = W + 'px'; canvas.style.height = H + 'px' }
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0)
-  if (!rocks.length) reset()
 }
 
-function groundY(x) {
-  return world.h - 110 + Math.sin(x * .01) * 10
+function gunTier() { let t = 0; for (let i = 0; i < gunMilestones.length; i++) if (data.gunLv >= gunMilestones[i]) t = i; return t }
+function gunRange() { return 20 + gunTier() * 9 + data.gunLv * .8 }
+function gunPower() { return .045 + gunTier() * .026 + data.gunLv * .004 }
+function upgradeCost() { return Math.floor(180 * Math.pow(1.18, data.gunLv - 1)) }
+function addXP(x) {
+  data.xp += x
+  while (data.xp >= data.playerLv * 120) { data.xp -= data.playerLv * 120; data.playerLv++; data.coins += 120 + data.playerLv * 30; data.diamonds += data.playerLv % 5 === 0 ? 5 : 0 }
 }
 
-function addRock(x, y, w, h, rot = 0, kind = 'stone') {
-  rocks.push({ x, y, w, h, rot, kind, seed: rand(0, 999) })
-}
-
-function buildLevel() {
-  rocks = []
-  // 地面和起点台阶
-  addRock(450, world.h - 60, 980, 120, 0, 'ground')
-  addRock(600, world.h - 190, 210, 42, -.08)
-  addRock(310, world.h - 330, 160, 38, .1)
-  addRock(545, world.h - 520, 165, 36, -.14)
-
-  // 手工设计的“掘地求升”式攀爬路线：平台、尖石、烟囱、反向钩
-  const plan = [
-    [350, 4200, 170, 36, .2], [650, 4040, 180, 38, -.18], [420, 3860, 125, 34, .08],
-    [700, 3650, 160, 42, .28], [505, 3440, 120, 35, -.25], [270, 3260, 150, 35, .12],
-    [560, 3090, 260, 38, 0], [760, 2890, 130, 35, -.35], [520, 2700, 135, 35, .22],
-    [260, 2520, 155, 38, -.12], [455, 2320, 120, 36, .3], [705, 2160, 180, 40, -.15],
-    [555, 1950, 110, 34, .06], [330, 1760, 190, 38, .18], [655, 1580, 140, 36, -.3],
-    [420, 1380, 130, 34, .1], [235, 1210, 120, 34, -.25], [525, 1060, 250, 42, .04],
-    [760, 850, 130, 36, -.2], [480, 690, 160, 34, .25], [260, 520, 150, 34, -.1],
-    [540, 350, 270, 45, 0], [450, 170, 230, 42, .08]
-  ]
-  plan.forEach(r => addRock(r[0], r[1], r[2], r[3], r[4]))
-
-  // 左右墙上的凸起，防止无聊直线
-  for (let y = 680; y < 4550; y += 360) {
-    addRock(80 + rand(-10, 20), y, 120, 32, rand(-.25, .25), 'edge')
-    addRock(820 + rand(-20, 10), y + 170, 130, 32, rand(-.25, .25), 'edge')
-  }
-
-  // 终点皇冠台
-  addRock(450, 70, 360, 70, 0, 'finish')
-}
-
-function reset() {
-  state = 'ready'; frame = 0; cameraY = world.h - H; lastHeight = 0
-  player.x = 450; player.y = world.h - 210; player.vx = 0; player.vy = 0; player.hammerA = -Math.PI * .55; player.targetA = player.hammerA; player.grip = 0
-  particles = []; clouds = []; stars = []; tips = []
-  buildLevel()
-  for (let i = 0; i < 14; i++) clouds.push({ x: rand(0, world.w), y: rand(120, world.h - 600), s: rand(.55, 1.4), v: rand(.08, .22) })
-  for (let i = 0; i < 60; i++) stars.push({ x: rand(0, world.w), y: rand(0, 900), r: rand(.8, 2.2), a: rand(.25, .9) })
-  addTip('拖动屏幕控制磁力钩', 450, world.h - 430)
-  addTip('钩头卡住支点，把自己弹上去', 535, 3090)
-  addTip('别急，慢慢找支点', 360, 1760)
-  addTip('上面就是终点', 450, 390)
-}
-
-function addTip(text, x, y) { tips.push({ text, x, y }) }
-function start() { if (state !== 'playing') state = 'playing' }
-function heightNow() { return Math.max(0, Math.floor((world.h - 210 - player.y) / 10)) }
-function hammerHead() { return { x: player.x + Math.cos(player.hammerA) * player.hammerLen, y: player.y + Math.sin(player.hammerA) * player.hammerLen } }
-function screenX(x) { return x - (player.x - W / 2) }
-function screenY(y) { return y - cameraY }
-
-function pointRect(px, py, r) {
-  const c = Math.cos(-r.rot), s = Math.sin(-r.rot)
-  const dx = px - r.x, dy = py - r.y
-  return { x: dx * c - dy * s, y: dx * s + dy * c }
-}
-function collideCircleRock(cx, cy, cr, rock) {
-  const p = pointRect(cx, cy, rock)
-  const hw = rock.w / 2, hh = rock.h / 2
-  const qx = clamp(p.x, -hw, hw), qy = clamp(p.y, -hh, hh)
-  const dx = p.x - qx, dy = p.y - qy
-  const d = Math.sqrt(dx * dx + dy * dy)
-  if (d >= cr) return null
-  let nx, ny, depth
-  if (d < .0001) {
-    const left = Math.abs(p.x + hw), right = Math.abs(hw - p.x), top = Math.abs(p.y + hh), bottom = Math.abs(hh - p.y)
-    const m = Math.min(left, right, top, bottom)
-    if (m === left) { nx = -1; ny = 0; depth = cr + left }
-    else if (m === right) { nx = 1; ny = 0; depth = cr + right }
-    else if (m === top) { nx = 0; ny = -1; depth = cr + top }
-    else { nx = 0; ny = 1; depth = cr + bottom }
-  } else { nx = dx / d; ny = dy / d; depth = cr - d }
-  const c = Math.cos(rock.rot), s = Math.sin(rock.rot)
-  return { nx: nx * c - ny * s, ny: nx * s + ny * c, depth }
-}
-
-function burst(x, y, color, n = 10) {
-  for (let i = 0; i < n; i++) particles.push({ x, y, vx: rand(-2, 2), vy: rand(-3, .2), r: rand(2, 4), life: rand(16, 32), max: 32, color })
-}
-
-function updateHammerTarget() {
-  if (!dragging) return
-  const wx = target.x + (player.x - W / 2), wy = target.y + cameraY
-  const a = Math.atan2(wy - player.y, wx - player.x)
-  player.targetA = a
-}
-
-function update() {
-  frame++
-  clouds.forEach(c => { c.x += c.v; if (c.x > world.w + 120) c.x = -120 })
-  particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.vy += .13; p.life-- })
-  particles = particles.filter(p => p.life > 0)
-  if (state !== 'playing') { cameraY += (player.y - H * .58 - cameraY) * .08; return }
-
-  updateHammerTarget()
-  let da = player.targetA - player.hammerA
-  while (da > Math.PI) da -= Math.PI * 2
-  while (da < -Math.PI) da += Math.PI * 2
-  const oldA = player.hammerA
-  player.hammerA += clamp(da, -.18, .18)
-  const angular = player.hammerA - oldA
-
-  player.vy += .42
-  player.vx *= .992
-  player.vy *= .995
-
-  // 磁力钩头接触地形：越快速甩动，反推越强
-  const hh = hammerHead()
-  let hit = null
-  for (const r of rocks) {
-    const c = collideCircleRock(hh.x, hh.y, 13, r)
-    if (c) { hit = { rock: r, ...c }; break }
-  }
-  if (hit) {
-    const armX = hh.x - player.x, armY = hh.y - player.y
-    const toward = (armX * hit.nx + armY * hit.ny) / Math.max(1, len(armX, armY))
-    const swingPower = Math.min(8, Math.abs(angular) * 42)
-    const pull = dragging ? 2.1 : .9
-    player.vx -= hit.nx * (pull + swingPower * .33 + Math.max(0, toward) * 1.2)
-    player.vy -= hit.ny * (pull + swingPower * .33 + Math.max(0, toward) * 1.2)
-    // 把锤头推出碰撞，等价于把人往反方向挪
-    player.x -= hit.nx * hit.depth * .82
-    player.y -= hit.ny * hit.depth * .82
-    player.grip = 8
-    if (frame % 5 === 0) burst(hh.x, hh.y, '#E8D8B0', 3)
-  } else if (player.grip > 0) player.grip--
-
-  player.x += player.vx
-  player.y += player.vy
-  player.x = clamp(player.x, 35, world.w - 35)
-
-  // 角色身体碰撞
-  for (let iter = 0; iter < 2; iter++) {
-    for (const r of rocks) {
-      const c = collideCircleRock(player.x, player.y, player.r, r)
-      if (!c) continue
-      player.x += c.nx * c.depth
-      player.y += c.ny * c.depth
-      const vn = player.vx * c.nx + player.vy * c.ny
-      if (vn < 0) { player.vx -= c.nx * vn * 1.25; player.vy -= c.ny * vn * 1.25 }
-      if (c.ny < -.55) { player.vx *= .82; if (Math.abs(player.vy) > 5) burst(player.x, player.y + player.r, '#C8B08A', 8) }
-    }
-  }
-
-  if (player.y > world.h - 130) { player.y = world.h - 130; player.vy = 0 }
-  const h = heightNow(); lastHeight = Math.max(lastHeight, h); bestHeight = Math.max(bestHeight, h)
-  if (player.y < 130 && player.x > 280 && player.x < 620) { state = 'win'; bestHeight = Math.max(bestHeight, 500); try { wx.setStorageSync('hammerBest', bestHeight) } catch (e) {} }
-  try { if (frame % 120 === 0) wx.setStorageSync('hammerBest', bestHeight) } catch (e) {}
-  cameraY += (player.y - H * .58 - cameraY) * .1
-  cameraY = clamp(cameraY, 0, world.h - H)
-}
-
+function resetButtons() { buttons = [] }
+function btn(id, x, y, w, h, text, onTap, tone = 'primary') { buttons.push({ id, x, y, w, h, text, onTap, tone }); drawButton(x, y, w, h, text, tone) }
+function hitButton(x, y) { for (let i = buttons.length - 1; i >= 0; i--) { const b = buttons[i]; if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) return b } return null }
 function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath() }
+function drawButton(x, y, w, h, text, tone) {
+  const grad = ctx.createLinearGradient(x, y, x, y+h)
+  if (tone === 'green') { grad.addColorStop(0, '#73F5A6'); grad.addColorStop(1, '#27C86D') }
+  else if (tone === 'orange') { grad.addColorStop(0, '#FFD36A'); grad.addColorStop(1, '#FF8B2E') }
+  else if (tone === 'blue') { grad.addColorStop(0, '#70D7FF'); grad.addColorStop(1, '#2388FF') }
+  else if (tone === 'ghost') { grad.addColorStop(0, 'rgba(255,255,255,.22)'); grad.addColorStop(1, 'rgba(255,255,255,.12)') }
+  else { grad.addColorStop(0, '#A98BFF'); grad.addColorStop(1, '#615DFF') }
+  ctx.save(); ctx.shadowColor = 'rgba(37,77,130,.22)'; ctx.shadowBlur = 10; ctx.shadowOffsetY = 4
+  ctx.fillStyle = grad; roundRect(x, y, w, h, h / 2); ctx.fill(); ctx.shadowBlur = 0
+  ctx.strokeStyle = 'rgba(255,255,255,.45)'; ctx.lineWidth = 1.5; ctx.stroke()
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 15px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, x + w / 2, y + h / 2 + 1); ctx.restore()
+}
 
-function drawBg() {
-  const t = clamp((world.h - cameraY) / world.h, 0, 1)
+function bg() {
   const g = ctx.createLinearGradient(0, 0, 0, H)
-  if (cameraY < 1000) { g.addColorStop(0, '#111A48'); g.addColorStop(.5, '#355BA7'); g.addColorStop(1, '#8AC3FF') }
-  else { g.addColorStop(0, '#7DD8FF'); g.addColorStop(.55, '#B9ECFF'); g.addColorStop(1, '#F9DCA4') }
+  g.addColorStop(0, '#7DE3FF'); g.addColorStop(.46, '#EAFEFF'); g.addColorStop(1, '#F7FFF2')
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H)
-  if (cameraY < 1200) {
-    stars.forEach(s => { const x = screenX(s.x), y = screenY(s.y); if (x > -20 && x < W+20 && y > -20 && y < H+20) { ctx.globalAlpha = s.a; ctx.fillStyle = '#FFF7C6'; ctx.beginPath(); ctx.arc(x, y, s.r, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1 } })
-  }
-  // 太阳/月亮
-  ctx.save(); ctx.globalAlpha = .9; ctx.fillStyle = cameraY < 1000 ? '#FFF4B0' : '#FFE285'; ctx.beginPath(); ctx.arc(W - 72, 82, 32, 0, Math.PI*2); ctx.fill(); ctx.restore()
-  clouds.forEach(c => drawCloud(screenX(c.x), screenY(c.y), c.s))
+  ctx.save(); ctx.globalAlpha = .35
+  ctx.fillStyle = '#FFFFFF'; for (let i = 0; i < 8; i++) { const x = (i * 111 + frame * .25) % (W + 140) - 70, y = 50 + (i % 4) * 55; cloud(x, y, .55 + (i % 3) * .2) }
+  ctx.restore()
+  const shine = ctx.createRadialGradient(W * .78, 62, 4, W * .78, 62, 120)
+  shine.addColorStop(0, 'rgba(255,229,120,.55)'); shine.addColorStop(1, 'rgba(255,229,120,0)')
+  ctx.fillStyle = shine; ctx.fillRect(0, 0, W, H)
 }
-function drawCloud(x, y, s) {
-  if (x < -120 || x > W+120 || y < -80 || y > H+80) return
-  ctx.save(); ctx.globalAlpha = .72; ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.arc(x, y, 20*s, 0, Math.PI*2); ctx.arc(x+26*s, y-10*s, 27*s, 0, Math.PI*2); ctx.arc(x+58*s, y, 20*s, 0, Math.PI*2); ctx.fill(); ctx.restore()
+function cloud(x, y, s) { ctx.beginPath(); ctx.arc(x, y, 22*s, 0, Math.PI*2); ctx.arc(x+26*s, y-10*s, 28*s, 0, Math.PI*2); ctx.arc(x+58*s, y, 21*s, 0, Math.PI*2); ctx.fill() }
+function card(x, y, w, h, alpha = .72) { ctx.save(); ctx.fillStyle = `rgba(255,255,255,${alpha})`; roundRect(x, y, w, h, 22); ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore() }
+function topBar() {
+  card(12, 10, W - 24, 70, .62)
+  ctx.fillStyle = '#195078'; ctx.font = 'bold 16px sans-serif'; ctx.textAlign = 'left'; ctx.fillText('🧼 清洁工 Lv.' + data.playerLv, 26, 38)
+  ctx.font = 'bold 13px sans-serif'; ctx.fillText('🪙 ' + fmt(data.coins), W - 150, 34); ctx.fillText('💎 ' + fmt(data.diamonds), W - 150, 58)
+  const need = data.playerLv * 120; ctx.fillStyle = 'rgba(20,92,140,.16)'; roundRect(26, 51, 140, 10, 5); ctx.fill(); ctx.fillStyle = '#4AD6FF'; roundRect(26, 51, 140 * clamp(data.xp / need, 0, 1), 10, 5); ctx.fill()
+}
+function bottomNav() {
+  const tabs = [['home','首页','🏠'], ['equip','装备','🔫'], ['tasks','任务','📋'], ['rank','排行','🏆'], ['shop','商店','🛒']]
+  card(10, H - 76, W - 20, 62, .72)
+  const w = (W - 24) / tabs.length
+  tabs.forEach((t, i) => {
+    const x = 12 + i * w, active = activeTab === t[0]
+    if (active) { ctx.fillStyle = 'rgba(53,166,255,.18)'; roundRect(x + 4, H - 68, w - 8, 46, 16); ctx.fill() }
+    ctx.fillStyle = active ? '#168DFF' : '#5D7890'; ctx.font = '18px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(t[2], x + w/2, H - 46)
+    ctx.font = '11px sans-serif'; ctx.fillText(t[1], x + w/2, H - 27)
+    buttons.push({ id: 'tab_' + t[0], x, y: H - 74, w, h: 60, text: t[1], onTap: () => { activeTab = t[0]; page = t[0] === 'home' ? 'home' : t[0] } })
+  })
 }
 
-function drawRock(r) {
-  const x = screenX(r.x), y = screenY(r.y)
-  if (x < -r.w - 80 || x > W + r.w + 80 || y < -r.h - 80 || y > H + r.h + 80) return
-  ctx.save(); ctx.translate(x, y); ctx.rotate(r.rot)
-  const grd = ctx.createLinearGradient(0, -r.h/2, 0, r.h/2)
-  if (r.kind === 'finish') { grd.addColorStop(0, '#FFE68A'); grd.addColorStop(1, '#C9832D') }
-  else if (r.kind === 'ground') { grd.addColorStop(0, '#B88355'); grd.addColorStop(1, '#6B452C') }
-  else { grd.addColorStop(0, '#B8C2C8'); grd.addColorStop(.5, '#7D8C94'); grd.addColorStop(1, '#4E5961') }
-  ctx.shadowColor = 'rgba(0,0,0,.22)'; ctx.shadowBlur = 8; ctx.shadowOffsetY = 5
-  ctx.fillStyle = grd; roundRect(-r.w/2, -r.h/2, r.w, r.h, Math.min(18, r.h/2)); ctx.fill()
-  ctx.shadowBlur = 0; ctx.strokeStyle = 'rgba(255,255,255,.25)'; ctx.lineWidth = 2; ctx.stroke()
-  ctx.fillStyle = 'rgba(255,255,255,.15)'; roundRect(-r.w/2+12, -r.h/2+7, r.w*.45, 5, 3); ctx.fill()
-  if (r.kind === 'finish') {
-    ctx.fillStyle = '#FFF6B0'; ctx.font = 'bold 22px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('终点', 0, 8)
-  }
+function drawObject(kind, x, y, s, clean) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s)
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round'
+  function rr(x,y,w,h,r,c,st='#236') { ctx.fillStyle=c; roundRect(x,y,w,h,r); ctx.fill(); ctx.strokeStyle=st; ctx.lineWidth=3; ctx.stroke() }
+  function wheel(cx, cy, r) { ctx.fillStyle='#243B53'; ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#BEEFFF'; ctx.beginPath(); ctx.arc(cx,cy,r*.45,0,Math.PI*2); ctx.fill() }
+  const shine = clean > .85 ? Math.sin(frame*.18)*.18 + .3 : 0
+  if (kind === 'bike') { ctx.strokeStyle='#208DEB'; ctx.lineWidth=8; ctx.beginPath(); ctx.moveTo(-80,30); ctx.lineTo(-20,-35); ctx.lineTo(45,30); ctx.lineTo(-80,30); ctx.lineTo(45,30); ctx.moveTo(-20,-35); ctx.lineTo(78,-35); ctx.stroke(); wheel(-92,40,32); wheel(88,40,32) }
+  else if (kind === 'scooter') { rr(-80,-8,150,54,18,'#35DDA2'); rr(-25,-60,48,58,18,'#6EE7FF'); wheel(-58,54,22); wheel(64,54,22); ctx.fillStyle='#FFD75A'; ctx.fillRect(60,-28,55,10) }
+  else if (kind === 'motor') { rr(-105,-20,190,66,22,'#FF8B2E'); rr(-35,-66,70,42,18,'#63D5FF'); wheel(-78,56,28); wheel(78,56,28); ctx.strokeStyle='#333'; ctx.lineWidth=8; ctx.beginPath(); ctx.moveTo(70,-50); ctx.lineTo(112,-72); ctx.stroke() }
+  else if (kind === 'car') { rr(-120,-30,240,76,22,'#FF6B6B'); rr(-55,-86,112,62,20,'#76DFFF'); wheel(-74,54,27); wheel(76,54,27); ctx.fillStyle='#FFE66D'; ctx.fillRect(92,-12,24,14) }
+  else if (kind === 'bus') { rr(-150,-62,300,120,18,'#FFD04C'); for(let i=-2;i<=2;i++) rr(i*48-18,-42,36,32,7,'#82E7FF'); wheel(-98,68,28); wheel(102,68,28) }
+  else if (['shop','villa','office','mall','tower'].includes(kind)) drawBuilding(kind)
+  else if (kind === 'excavator') { rr(-120,0,145,55,18,'#F6B536'); rr(-80,-58,90,60,16,'#FFD75A'); ctx.strokeStyle='#D8891D'; ctx.lineWidth=15; ctx.beginPath(); ctx.moveTo(20,-20); ctx.lineTo(92,-70); ctx.lineTo(132,-20); ctx.stroke(); rr(105,-14,60,28,8,'#C87921'); rr(-140,54,260,32,16,'#394B59') }
+  else if (kind === 'container') { rr(-150,-65,300,130,12,'#E45454'); ctx.strokeStyle='rgba(255,255,255,.35)'; ctx.lineWidth=4; for(let i=-2;i<=2;i++){ctx.beginPath();ctx.moveTo(i*45,-55);ctx.lineTo(i*45,55);ctx.stroke()} }
+  else if (kind === 'crane') { ctx.strokeStyle='#F5B642'; ctx.lineWidth=13; ctx.beginPath(); ctx.moveTo(-20,90); ctx.lineTo(-20,-110); ctx.lineTo(140,-110); ctx.moveTo(-20,-80); ctx.lineTo(110,-110); ctx.stroke(); rr(-55,80,70,32,8,'#F5B642'); ctx.strokeStyle='#333'; ctx.lineWidth=4; ctx.beginPath(); ctx.moveTo(110,-110); ctx.lineTo(110,-20); ctx.stroke(); rr(92,-20,36,28,5,'#E85D5D') }
+  else if (kind === 'ship') { rr(-150,0,300,75,28,'#5AA9FF'); rr(-80,-74,145,75,12,'#FFFFFF'); rr(-30,-116,54,44,9,'#FF8B2E'); for(let i=-2;i<=2;i++) rr(i*34-10,-52,20,20,5,'#7EE7FF') }
+  else if (kind === 'plane') { rr(-140,-22,280,48,24,'#EAF7FF'); ctx.fillStyle='#55B5FF'; ctx.beginPath(); ctx.moveTo(-20,-15); ctx.lineTo(-105,-95); ctx.lineTo(30,-24); ctx.fill(); ctx.beginPath(); ctx.moveTo(-10,15); ctx.lineTo(-95,86); ctx.lineTo(38,24); ctx.fill(); ctx.beginPath(); ctx.moveTo(104,-18); ctx.lineTo(150,-62); ctx.lineTo(134,0); ctx.fill() }
+  else if (kind === 'sphinx') { rr(-135,28,270,48,20,'#D8AA54'); rr(-48,-60,96,90,26,'#C89542'); ctx.fillStyle='#D8AA54'; ctx.beginPath(); ctx.moveTo(-50,28); ctx.lineTo(-140,96); ctx.lineTo(110,96); ctx.lineTo(50,28); ctx.fill() }
+  else if (kind === 'pyramid') { ctx.fillStyle='#D9B567'; ctx.beginPath(); ctx.moveTo(0,-135); ctx.lineTo(-165,95); ctx.lineTo(165,95); ctx.closePath(); ctx.fill(); ctx.strokeStyle='#8B6B33'; ctx.lineWidth=3; ctx.stroke(); ctx.strokeStyle='rgba(255,255,255,.25)'; for(let i=0;i<8;i++){ctx.beginPath();ctx.moveTo(-130+i*38,40-i*20);ctx.lineTo(130-i*10,40-i*20);ctx.stroke()} }
+  else if (kind === 'wall') { for(let i=-4;i<=4;i++) rr(i*42, Math.sin(i)*18, 48, 46, 6, '#B88D55'); rr(-150,-45,55,70,8,'#9F7442'); rr(95,-55,65,85,8,'#9F7442') }
+  else if (kind === 'eiffel') { ctx.strokeStyle='#66584E'; ctx.lineWidth=10; ctx.beginPath(); ctx.moveTo(-110,110);ctx.lineTo(0,-135);ctx.lineTo(110,110);ctx.moveTo(-72,30);ctx.lineTo(72,30);ctx.moveTo(-48,-38);ctx.lineTo(48,-38);ctx.moveTo(-24,-90);ctx.lineTo(24,-90);ctx.stroke() }
+  else if (kind === 'station') { rr(-75,-24,150,48,16,'#EAF7FF'); rr(-135,-55,45,110,8,'#3D8DFF'); rr(90,-55,45,110,8,'#3D8DFF'); ctx.strokeStyle='#B8C9D8'; ctx.lineWidth=6; ctx.beginPath(); ctx.moveTo(-90,0);ctx.lineTo(90,0);ctx.stroke(); ctx.fillStyle='#FFD75A'; ctx.beginPath(); ctx.arc(0,0,28,0,Math.PI*2);ctx.fill() }
+  function drawBuilding(k) { const col = k==='shop'?'#FFB24A':k==='villa'?'#FFFFFF':k==='office'?'#79C7FF':k==='mall'?'#B896FF':'#62D0FF'; const ww = k==='tower'?150:k==='mall'?260:k==='office'?190:k==='villa'?230:230; const hh = k==='tower'?260:k==='mall'?160:k==='office'?230:k==='villa'?155:130; rr(-ww/2,-hh/2,ww,hh,16,col); for(let yy=-hh/2+25; yy<hh/2-15; yy+=38) for(let xx=-ww/2+24; xx<ww/2-20; xx+=42) rr(xx,yy,24,22,5,'#BDF3FF'); if(k==='villa'){ctx.fillStyle='#EF5C5C';ctx.beginPath();ctx.moveTo(-135,-78);ctx.lineTo(0,-155);ctx.lineTo(135,-78);ctx.fill()} }
+  if (shine) { ctx.globalAlpha = shine; ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.ellipse(-40, -40, 90, 18, -.3, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1 }
   ctx.restore()
 }
 
-function drawPlayer() {
-  const x = screenX(player.x), y = screenY(player.y)
-  const hh = hammerHead(); const hx = screenX(hh.x), hy = screenY(hh.y)
+function objectBox() { const size = Math.min(W * .82, H * .36); return { x: W/2, y: H*.45, s: size / 330, size } }
+function startLevel(idx) {
+  currentLevel = idx; page = 'game'; activeTab = 'home'; startedAt = Date.now(); gameTime = 0; cleanRatio = 0; water = []; foamZones = []; tornado = null; spraying = false
+  const lv = levels[idx]; const box = objectBox(); dirt = []
+  const count = Math.floor(42 + lv[3] * 30)
+  for (let i = 0; i < count; i++) {
+    const typeIndex = clamp(Math.floor(rand(0, lv[4] + 1)), 0, stainTypes.length - 1)
+    const st = stainTypes[typeIndex]
+    const rx = rand(-140, 140), ry = rand(-105, 100), rr = rand(10, 25) * (1 + lv[3] * .08)
+    dirt.push({ x: box.x + rx * box.s, y: box.y + ry * box.s, r: rr * box.s, hp: st.hp * lv[3], max: st.hp * lv[3], type: typeIndex, wob: rand(0, 9) })
+  }
+}
+function updateClean() { const sum = dirt.reduce((a, d) => a + Math.max(0, d.hp), 0), max = dirt.reduce((a, d) => a + d.max, 0); cleanRatio = max ? 1 - sum / max : 1 }
+function cleanAt(x, y, radius, power, kind = 'water') {
+  const p = power * (kind === 'foam' ? .42 : 1)
+  dirt.forEach(d => { const dd = dist(x, y, d.x, d.y); if (dd < radius + d.r) { const k = 1 - dd / (radius + d.r); d.hp = Math.max(0, d.hp - p * (0.35 + k * 1.35)) } })
+}
+function finishLevel() {
+  const sec = Math.max(1, Math.floor((Date.now() - startedAt) / 1000))
+  const base = 120 + currentLevel * 28
+  const speedBonus = Math.max(0, 90 - sec) * 2
+  const reward = Math.floor(base + speedBonus + levels[currentLevel][3] * 80)
+  data.coins += reward; addXP(50 + currentLevel * 8); data.totalArea += Math.floor(100 * levels[currentLevel][3])
+  data.daily.clean3 = (data.daily.clean3 || 0) + 1; data.daily.area500 = (data.daily.area500 || 0) + Math.floor(100 * levels[currentLevel][3])
+  data.finished[currentLevel] = true; if (data.unlocked <= currentLevel + 1 && data.unlocked < levels.length) data.unlocked = currentLevel + 2
+  save(); result = { sec, reward, level: currentLevel }; page = 'result'; spraying = false
+}
+function useSkill(name) {
+  if (page !== 'game') return
+  const box = objectBox()
+  if (name === 'shock') { cleanAt(sprayX || box.x, sprayY || box.y, 90 + gunTier() * 16, 8, 'water'); popText('冲击波！', sprayX || box.x, sprayY || box.y); splash(sprayX || box.x, sprayY || box.y, '#C9F8FF', 36) }
+  if (name === 'foam') { foamZones.push({ x: sprayX || box.x, y: sprayY || box.y, r: 95, life: 600 }); popText('泡沫清洁', sprayX || box.x, sprayY || box.y) }
+  if (name === 'tornado') { tornado = { x: box.x, y: box.y, a: 0, life: 300 }; popText('超级水龙卷！', box.x, box.y) }
+  if (name === 'purify' && cleanRatio >= .9) { dirt.forEach(d => d.hp = 0); popText('一键净化！', box.x, box.y); updateClean(); finishLevel() }
+}
+function splash(x, y, c, n) { for (let i=0;i<n;i++) water.push({ x, y, vx: rand(-3,3), vy: rand(-5,1), r: rand(2,5), life: rand(18,38), max: 38, c }) }
+function popText(text, x, y) { water.push({ text, x, y, vx:0, vy:-1.2, r:0, life:55, max:55, c:'#fff' }) }
 
-  // 伸缩磁力钩：保留“物理支点攀爬”的类型，但视觉不照搬锤子/锅
+function updateGame() {
+  if (page === 'game') {
+    gameTime = Math.floor((Date.now() - startedAt) / 1000)
+    if (spraying) {
+      const radius = gunRange(), power = gunPower()
+      cleanAt(sprayX, sprayY, radius, power, 'water')
+      const nozzle = { x: W/2, y: H - 88 }
+      for (let i=0;i<5;i++) water.push({ x: nozzle.x + rand(-8,8), y: nozzle.y + rand(-4,4), vx: (sprayX-nozzle.x)/22 + rand(-1.2,1.2), vy: (sprayY-nozzle.y)/22 + rand(-1.2,1.2), r: rand(2,5), life: rand(18,30), max: 30, c: '#78DFFF' })
+    }
+    foamZones.forEach(f => { f.life--; cleanAt(f.x + Math.sin(frame*.04)*18, f.y + Math.cos(frame*.035)*18, f.r, gunPower()*.6, 'foam') })
+    foamZones = foamZones.filter(f => f.life > 0)
+    if (tornado) { tornado.life--; tornado.a += .16; const box = objectBox(); const x = box.x + Math.cos(tornado.a)*90, y = box.y + Math.sin(tornado.a*1.4)*65; cleanAt(x, y, 76, gunPower()*2.7); if (frame%3===0) splash(x,y,'#BDF7FF',3); if (tornado.life <= 0) tornado = null }
+    updateClean(); if (cleanRatio >= .995) finishLevel()
+  }
+  water.forEach(p => { p.x += p.vx; p.y += p.vy; p.vy += .05; p.life-- })
+  water = water.filter(p => p.life > 0)
+}
+
+function renderGame() {
+  const lv = levels[currentLevel], box = objectBox()
+  ctx.fillStyle = '#E9FCFF'; ctx.fillRect(0,0,W,H)
+  bg()
+  topGameUI()
+  // 清洗场地玻璃卡
+  card(16, 94, W-32, H-230, .5)
+  drawObject(lv[2], box.x, box.y, box.s, cleanRatio)
+  dirt.forEach(d => { if (d.hp <= 0) return; const st = stainTypes[d.type]; ctx.save(); ctx.globalAlpha = clamp(d.hp / d.max, 0, 1) * .95; ctx.fillStyle = st.color; ctx.beginPath(); ctx.ellipse(d.x + Math.sin(frame*.03+d.wob)*2, d.y, d.r*1.25, d.r*.85, d.wob, 0, Math.PI*2); ctx.fill(); ctx.restore() })
+  foamZones.forEach(f => { ctx.globalAlpha = clamp(f.life/80,0,.55); ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha=1 })
+  if (tornado) { ctx.save(); ctx.strokeStyle='#7EE7FF'; ctx.lineWidth=8; ctx.globalAlpha=.65; ctx.beginPath(); for(let a=0;a<Math.PI*4;a+=.25){ const r=8+a*8, x=box.x+Math.cos(a+tornado.a)*r, y=box.y+Math.sin(a+tornado.a)*r*.55; if(a===0)ctx.moveTo(x,y); else ctx.lineTo(x,y)} ctx.stroke(); ctx.restore() }
+  drawSpray()
+  water.forEach(p => { ctx.save(); ctx.globalAlpha = clamp(p.life/p.max,0,1); if (p.text) { ctx.fillStyle='#2388FF'; ctx.font='bold 20px sans-serif'; ctx.textAlign='center'; ctx.fillText(p.text,p.x,p.y) } else { ctx.fillStyle=p.c; ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fill() } ctx.restore() })
+  bottomGameUI()
+}
+function topGameUI() {
+  card(12, 12, W-24, 66, .68)
+  ctx.fillStyle = '#164A72'; ctx.font = 'bold 15px sans-serif'; ctx.textAlign='left'; ctx.fillText('Level ' + (currentLevel+1) + '  ' + levels[currentLevel][0], 26, 35)
+  ctx.font = '12px sans-serif'; ctx.fillText(levels[currentLevel][1] + ' · ' + stainTypes[clamp(levels[currentLevel][4]-1,0,5)].name + '挑战', 26, 58)
+  ctx.fillStyle='rgba(22,93,150,.14)'; roundRect(W-142, 28, 102, 14, 7); ctx.fill(); ctx.fillStyle='#39D98A'; roundRect(W-142, 28, 102*cleanRatio, 14, 7); ctx.fill()
+  ctx.fillStyle='#164A72'; ctx.font='bold 13px sans-serif'; ctx.textAlign='right'; ctx.fillText(Math.floor(cleanRatio*100)+'%', W-22, 40); ctx.fillText('⏱ '+gameTime+'s', W-22, 62)
+}
+function drawSpray() {
+  const nozzle = { x: W/2, y: H-88 }
   ctx.save()
-  ctx.strokeStyle = 'rgba(12,38,76,.38)'; ctx.lineWidth = 12; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(x, y - 6); ctx.lineTo(hx, hy); ctx.stroke()
-  const cable = ctx.createLinearGradient(x, y, hx, hy)
-  cable.addColorStop(0, '#F7FAFF'); cable.addColorStop(.45, '#78D9FF'); cable.addColorStop(1, player.grip ? '#FFE36C' : '#37A8FF')
-  ctx.strokeStyle = cable; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(x, y - 6); ctx.lineTo(hx, hy); ctx.stroke()
-  ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x + 3, y - 9); ctx.lineTo(hx + 3, hy - 3); ctx.stroke()
-
-  // 钩头/磁吸盘
-  ctx.translate(hx, hy); ctx.rotate(player.hammerA)
-  const hookGlow = player.grip ? '#FFD84D' : '#69E6FF'
-  ctx.shadowColor = hookGlow; ctx.shadowBlur = player.grip ? 18 : 8
-  ctx.fillStyle = player.grip ? '#FFE36C' : '#8FEAFF'
-  ctx.strokeStyle = '#135A96'; ctx.lineWidth = 2.5
-  ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
-  ctx.shadowBlur = 0
-  ctx.fillStyle = '#1768A6'; ctx.fillRect(-4, -19, 8, 10)
-  ctx.strokeStyle = player.grip ? '#FFF0A0' : '#DDFBFF'; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(0, 0, 24, -1.05, 1.05); ctx.stroke()
-  ctx.strokeStyle = '#135A96'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, 0, 24, -1.05, 1.05); ctx.stroke()
+  // 水枪
+  const tier = gunTier(); ctx.translate(nozzle.x, nozzle.y)
+  ctx.fillStyle = gunColors[tier]; ctx.strokeStyle='#13527E'; ctx.lineWidth=3; roundRect(-34, -12, 68, 24, 10); ctx.fill(); ctx.stroke(); roundRect(8, 8, 20, 34, 8); ctx.fill(); ctx.stroke(); ctx.fillStyle='#DDF8FF'; roundRect(28,-6,42,12,6); ctx.fill(); ctx.stroke()
   ctx.restore()
-
-  // 主角：小型星际维修胶囊/机器人，不再是锅和人
-  ctx.save(); ctx.translate(x, y)
-  // 喷气尾焰
-  const thrust = Math.min(1, Math.abs(player.vx) * .04 + Math.max(0, player.vy) * .025)
-  if (thrust > .08) {
-    ctx.globalAlpha = .55 + thrust * .35
-    ctx.fillStyle = '#FFB13B'; ctx.beginPath(); ctx.moveTo(-10, 30); ctx.quadraticCurveTo(0, 50 + thrust * 18, 10, 30); ctx.closePath(); ctx.fill()
-    ctx.fillStyle = '#FFF19A'; ctx.beginPath(); ctx.moveTo(-5, 30); ctx.quadraticCurveTo(0, 42 + thrust * 12, 5, 30); ctx.closePath(); ctx.fill()
-    ctx.globalAlpha = 1
-  }
-
-  // 胶囊身体
-  const body = ctx.createLinearGradient(-22, -30, 24, 34)
-  body.addColorStop(0, '#FFFFFF'); body.addColorStop(.45, '#72D9FF'); body.addColorStop(1, '#2079D6')
-  ctx.shadowColor = 'rgba(0,28,74,.28)'; ctx.shadowBlur = 12; ctx.shadowOffsetY = 5
-  ctx.fillStyle = body; ctx.strokeStyle = '#0B3F87'; ctx.lineWidth = 3
-  roundRect(-24, -34, 48, 68, 23); ctx.fill(); ctx.stroke()
-  ctx.shadowBlur = 0
-
-  // 玻璃面罩
-  const glass = ctx.createRadialGradient(-6, -13, 3, 0, -8, 24)
-  glass.addColorStop(0, '#FFFFFF'); glass.addColorStop(.28, '#C8FAFF'); glass.addColorStop(1, '#1777D7')
-  ctx.fillStyle = glass; ctx.strokeStyle = '#0B3F87'; ctx.lineWidth = 2
-  ctx.beginPath(); ctx.ellipse(0, -10, 20, 16, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
-  ctx.fillStyle = '#082B5F'; ctx.beginPath(); ctx.arc(-7, -10, 2.5, 0, Math.PI * 2); ctx.arc(7, -10, 2.5, 0, Math.PI * 2); ctx.fill()
-  ctx.strokeStyle = '#08356F'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, -4, 6, .2, Math.PI - .2); ctx.stroke()
-  ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.beginPath(); ctx.ellipse(-8, -17, 7, 3, -.3, 0, Math.PI * 2); ctx.fill()
-
-  // 机械臂连接点
-  ctx.fillStyle = '#FFE36C'; ctx.strokeStyle = '#0B3F87'; ctx.lineWidth = 2
-  ctx.beginPath(); ctx.arc(Math.cos(player.hammerA) * 19, Math.sin(player.hammerA) * 19 - 3, 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
-
-  // 两侧小推进器
-  ctx.fillStyle = '#1556A0'; ctx.strokeStyle = '#0B3F87'; ctx.lineWidth = 2
-  roundRect(-34, 2, 14, 25, 7); ctx.fill(); ctx.stroke()
-  roundRect(20, 2, 14, 25, 7); ctx.fill(); ctx.stroke()
-  ctx.fillStyle = '#9AEFFF'; ctx.beginPath(); ctx.arc(-27, 16, 3, 0, Math.PI * 2); ctx.arc(27, 16, 3, 0, Math.PI * 2); ctx.fill()
-  ctx.restore()
+  if (!spraying) return
+  const g = ctx.createLinearGradient(nozzle.x, nozzle.y, sprayX, sprayY); g.addColorStop(0,'rgba(255,255,255,.75)'); g.addColorStop(1,'rgba(71,199,255,.22)')
+  ctx.strokeStyle=g; ctx.lineWidth=gunRange()*.55; ctx.lineCap='round'; ctx.beginPath(); ctx.moveTo(nozzle.x+28,nozzle.y-2); ctx.lineTo(sprayX,sprayY); ctx.stroke()
+  ctx.strokeStyle='rgba(255,255,255,.82)'; ctx.lineWidth=5; ctx.beginPath(); ctx.moveTo(nozzle.x+28,nozzle.y-2); ctx.lineTo(sprayX,sprayY); ctx.stroke()
+  ctx.fillStyle='rgba(104,221,255,.3)'; ctx.beginPath(); ctx.arc(sprayX,sprayY,gunRange(),0,Math.PI*2); ctx.fill()
+}
+function bottomGameUI() {
+  card(12, H-116, W-24, 100, .65)
+  const skills = [['shock','冲击波'], ['foam','泡沫'], ['tornado','龙卷'], ['purify','净化']]
+  const w = (W-44)/4
+  skills.forEach((s,i)=>btn('skill_'+s[0], 22+i*w, H-101, w-8, 42, s[1], () => useSkill(s[0]), s[0]==='purify'&&cleanRatio<.9?'ghost':'blue'))
+  ctx.fillStyle='#486C82'; ctx.font='12px sans-serif'; ctx.textAlign='center'; ctx.fillText('按住屏幕持续喷水，拖动清洗污渍', W/2, H-28)
 }
 
-
-function drawUI() {
-  const h = heightNow()
-  ctx.save()
-  roundRect(12, 12, 150, 72, 16); ctx.fillStyle = 'rgba(19,39,76,.68)'; ctx.fill()
-  ctx.fillStyle = '#FFFFFF'; ctx.font = 'bold 18px sans-serif'; ctx.textAlign = 'left'; ctx.fillText('高度 ' + h + 'm', 26, 40)
-  ctx.font = '13px sans-serif'; ctx.fillText('最高 ' + bestHeight + 'm', 26, 64)
-  const barH = Math.max(50, H - 150); ctx.fillStyle = 'rgba(255,255,255,.2)'; roundRect(W - 22, 80, 8, barH, 4); ctx.fill()
-  ctx.fillStyle = '#FFD86B'; roundRect(W - 22, 80 + barH * (1 - clamp(h / 500, 0, 1)), 8, barH * clamp(h / 500, 0, 1), 4); ctx.fill()
-  ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.font = '12px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('500m', W - 32, 72)
-
-  if (dragging && state === 'playing') {
-    ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 2; ctx.setLineDash([6, 5]); ctx.beginPath(); ctx.moveTo(W/2, screenY(player.y)); ctx.lineTo(target.x, target.y); ctx.stroke(); ctx.setLineDash([])
-    ctx.fillStyle = 'rgba(255,255,255,.18)'; ctx.beginPath(); ctx.arc(target.x, target.y, 26, 0, Math.PI*2); ctx.fill()
-  }
-  if (state === 'ready') modal('星球钩爪', '拖动控制磁力钩，借支点向上攀爬\n掉下去也别急，重新找节奏！', '点击开始')
-  if (state === 'win') modal('抵达信标！', '最高高度 ' + bestHeight + 'm\n钩爪操作拉满！', '再来一局')
-  ctx.restore()
+function homePage() {
+  bg(); topBar()
+  const idx = Math.min(data.unlocked - 1, levels.length - 1), lv = levels[idx]
+  ctx.fillStyle = '#195078'; ctx.font = 'bold 24px sans-serif'; ctx.textAlign='center'; ctx.fillText('巨物清洁工', W/2, 116)
+  ctx.font='13px sans-serif'; ctx.fillStyle='#5B7D93'; ctx.fillText('把脏兮兮的巨物洗到闪闪发光', W/2, 139)
+  card(28, 160, W-56, H-285, .68)
+  const box = { x: W/2, y: H*.42, s: Math.min(W*.74, H*.28)/330 }
+  drawObject(lv[2], box.x, box.y, box.s, .96)
+  ctx.fillStyle='#164A72'; ctx.font='bold 20px sans-serif'; ctx.fillText('当前关卡：Level '+(idx+1), W/2, H*.62)
+  ctx.font='bold 16px sans-serif'; ctx.fillText(lv[1]+' · '+lv[0], W/2, H*.62+28)
+  btn('start', W/2-92, H*.62+48, 184, 48, '开始清洁', () => startLevel(idx), 'orange')
+  btn('levels', W/2-70, H*.62+108, 140, 38, '关卡选择', () => { page='levels' }, 'blue')
+  bottomNav()
 }
-function modal(title, body, btn) {
-  const w = Math.min(330, W - 34), h = 220, x = (W - w)/2, y = H*.26
-  ctx.fillStyle = 'rgba(18,32,65,.86)'; roundRect(x, y, w, h, 24); ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 1.5; ctx.stroke()
-  ctx.textAlign = 'center'; ctx.fillStyle = '#FFE08A'; ctx.font = 'bold 32px sans-serif'; ctx.fillText(title, W/2, y+55)
-  ctx.fillStyle = '#F2FAFF'; ctx.font = '15px sans-serif'; body.split('\n').forEach((line, i) => ctx.fillText(line, W/2, y+100+i*26))
-  ctx.fillStyle = '#FF8B36'; roundRect(W/2-78, y+160, 156, 38, 19); ctx.fill(); ctx.fillStyle = '#fff'; ctx.font = 'bold 16px sans-serif'; ctx.fillText(btn, W/2, y+185)
+function levelsPage() {
+  bg(); topBar(); ctx.fillStyle='#164A72'; ctx.font='bold 22px sans-serif'; ctx.textAlign='center'; ctx.fillText('关卡选择', W/2, 118)
+  const startY = 142, cols=2, gap=10, bw=(W-42)/2, bh=72
+  levels.forEach((lv,i)=>{ const x=16+(i%cols)*(bw+gap), y=startY+Math.floor(i/cols)*(bh+8); if(y>H-92) return; card(x,y,bw,bh,.62); ctx.fillStyle=i<data.unlocked?'#164A72':'#94A5B2'; ctx.font='bold 13px sans-serif'; ctx.textAlign='left'; ctx.fillText('Lv.'+(i+1)+' '+lv[0],x+12,y+24); ctx.font='11px sans-serif'; ctx.fillText(lv[1],x+12,y+45); ctx.textAlign='right'; ctx.fillText(data.finished[i]?'✅':i<data.unlocked?'▶':'🔒',x+bw-12,y+45); buttons.push({id:'lv'+i,x,y,w:bw,h:bh,onTap:()=>{if(i<data.unlocked)startLevel(i)}}) })
+  bottomNav()
 }
-
-function drawTips() {
-  tips.forEach(t => { const x = screenX(t.x), y = screenY(t.y); if (x < -120 || x > W+120 || y < -30 || y > H+30) return; ctx.save(); ctx.globalAlpha = .82; ctx.fillStyle = 'rgba(0,0,0,.32)'; roundRect(x-86, y-18, 172, 30, 15); ctx.fill(); ctx.fillStyle = '#fff'; ctx.font = '12px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(t.text, x, y+2); ctx.restore() })
+function equipPage() {
+  bg(); topBar(); ctx.fillStyle='#164A72'; ctx.font='bold 22px sans-serif'; ctx.textAlign='center'; ctx.fillText('装备升级', W/2, 118)
+  card(26, 150, W-52, 290, .7); const tier=gunTier()
+  ctx.save(); ctx.translate(W/2,230); ctx.scale(1.25,1.25); ctx.fillStyle=gunColors[tier]; ctx.strokeStyle='#13527E'; ctx.lineWidth=4; roundRect(-70,-18,118,36,16); ctx.fill(); ctx.stroke(); roundRect(10,16,32,58,12); ctx.fill(); ctx.stroke(); ctx.fillStyle='#DDF8FF'; roundRect(44,-9,76,18,9); ctx.fill(); ctx.stroke(); ctx.restore()
+  ctx.fillStyle='#164A72'; ctx.font='bold 19px sans-serif'; ctx.fillText(gunNames[tier]+' Lv.'+data.gunLv, W/2, 326)
+  ctx.font='14px sans-serif'; ctx.fillText('喷射范围 '+Math.round(gunRange())+'  压力 '+Math.round(gunPower()*2200), W/2, 354)
+  const cost=upgradeCost(); btn('upgrade', W/2-96, 382, 192, 46, data.coins>=cost?'升级 '+cost+'金币':'金币不足 '+cost, () => { if(data.coins>=cost&&data.gunLv<30){data.coins-=cost;data.gunLv++;save()} }, data.coins>=cost?'orange':'ghost')
+  card(26, 462, W-52, 72, .58); ctx.fillStyle='#51748C'; ctx.font='13px sans-serif'; ctx.fillText('Lv5 强压 · Lv10 涡轮 · Lv20 激光 · Lv30 银河全屏', W/2, 505)
+  bottomNav()
 }
+function tasksPage() {
+  bg(); topBar(); ctx.fillStyle='#164A72'; ctx.font='bold 22px sans-serif'; ctx.textAlign='center'; ctx.fillText('每日任务', W/2, 118)
+  const tasks=[['完成3次清洁',data.daily.clean3||0,3,'金币500'],['清洁面积500㎡',data.daily.area500||0,500,'钻石10'],['观看1次广告',data.daily.ad||0,1,'金币1000']]
+  tasks.forEach((t,i)=>{ const y=152+i*94; card(24,y,W-48,74,.68); ctx.fillStyle='#164A72'; ctx.font='bold 15px sans-serif'; ctx.textAlign='left'; ctx.fillText(t[0],42,y+28); ctx.font='12px sans-serif'; ctx.fillStyle='#607D91'; ctx.fillText('进度 '+Math.min(t[1],t[2])+'/'+t[2]+' · 奖励 '+t[3],42,y+52) })
+  bottomNav()
+}
+function rankPage() { bg(); topBar(); ctx.fillStyle='#164A72'; ctx.font='bold 22px sans-serif'; ctx.textAlign='center'; ctx.fillText('排行榜', W/2, 118); card(28,150,W-56,270,.7); const rows=[['今日清洁面积',Math.floor((data.daily.area500||0))+'㎡'],['历史清洁面积',fmt(data.totalArea)+'㎡'],['好友排名','开发中'],['清洁大师称号',Object.keys(data.finished).length+' / 20关']]; rows.forEach((r,i)=>{ctx.fillStyle=i===1?'#FF8B2E':'#164A72';ctx.font='bold 16px sans-serif';ctx.textAlign='left';ctx.fillText((i+1)+'. '+r[0],54,195+i*52);ctx.textAlign='right';ctx.fillText(r[1],W-54,195+i*52)}); bottomNav() }
+function shopPage() { bg(); topBar(); ctx.fillStyle='#164A72'; ctx.font='bold 22px sans-serif'; ctx.textAlign='center'; ctx.fillText('商店', W/2, 118); card(26,150,W-52,300,.7); const items=['火焰喷枪','冰霜喷枪','雷电喷枪','彩虹喷枪','银河喷枪']; items.forEach((it,i)=>{const y=178+i*48;ctx.fillStyle=gunColors[i];ctx.beginPath();ctx.arc(54,y,15,0,Math.PI*2);ctx.fill();ctx.fillStyle='#164A72';ctx.font='bold 14px sans-serif';ctx.textAlign='left';ctx.fillText(it,78,y+5);ctx.textAlign='right';ctx.fillText(i<data.skin+1?'已拥有':'皮肤券',W-48,y+5)}); bottomNav() }
+function resultPage() { bg(); card(28, H*.2, W-56, 330, .78); ctx.fillStyle='#164A72'; ctx.font='bold 30px sans-serif'; ctx.textAlign='center'; ctx.fillText('清洁完成！', W/2, H*.2+58); drawObject(levels[result.level][2], W/2, H*.2+145, Math.min(W*.62,180)/330, 1); ctx.font='bold 17px sans-serif'; ctx.fillText('用时 '+result.sec+' 秒', W/2, H*.2+220); ctx.fillText('获得金币 +' + result.reward, W/2, H*.2+250); btn('double', W/2-105, H*.2+274, 100, 42, '双倍金币', () => { data.coins += result.reward; save(); page='home' }, 'orange'); btn('next', W/2+5, H*.2+274, 100, 42, result.level+1<levels.length?'下一关':'回首页', () => { if(result.level+1<levels.length) startLevel(result.level+1); else page='home' }, 'blue') }
 
 function render() {
-  drawBg()
-  rocks.forEach(drawRock)
-  drawTips()
-  particles.forEach(p => { ctx.globalAlpha = clamp(p.life / p.max, 0, 1); ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(screenX(p.x), screenY(p.y), p.r, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1 })
-  drawPlayer()
-  drawUI()
+  frame++; resetButtons(); updateGame()
+  if (page==='home') homePage(); else if(page==='levels') levelsPage(); else if(page==='equip') equipPage(); else if(page==='tasks') tasksPage(); else if(page==='rank') rankPage(); else if(page==='shop') shopPage(); else if(page==='game') renderGame(); else if(page==='result') resultPage()
 }
-
-function pos(t) { return { x: t.clientX, y: t.clientY } }
+function touchPos(t) { return { x: t.clientX, y: t.clientY } }
 wx.onTouchStart(e => {
-  const t = (e.changedTouches || e.touches || [])[0]
-  if (!t) return
-  if (state === 'ready' || state === 'win') { reset(); start(); return }
-  start(); dragging = true; touchId = t.identifier; target = pos(t)
-})
-wx.onTouchMove(e => {
   const list = e.changedTouches || e.touches || []
-  for (let i = 0; i < list.length; i++) if (list[i].identifier === touchId) target = pos(list[i])
+  for (let i=0;i<list.length;i++) {
+    const p = touchPos(list[i]); const b = hitButton(p.x, p.y)
+    if (b) { b.onTap && b.onTap(); return }
+    if (page === 'game') { spraying = true; sprayX = p.x; sprayY = p.y; touches[0] = list[i].identifier }
+  }
 })
-wx.onTouchEnd(e => { const list = e.changedTouches || []; for (let i = 0; i < list.length; i++) if (list[i].identifier === touchId) { dragging = false; touchId = null } })
-wx.onTouchCancel(() => { dragging = false; touchId = null })
-
-function loop() { update(); render(); nextFrame(loop) }
-try { bestHeight = Number(wx.getStorageSync('hammerBest') || 0) } catch (e) { bestHeight = 0 }
-resize(); try { wx.onWindowResize(resize) } catch (e) {}
-loop()
+wx.onTouchMove(e => { const list=e.changedTouches||e.touches||[]; for(let i=0;i<list.length;i++){ if(page==='game' && (touches[0]===undefined || touches[0]===list[i].identifier)){ const p=touchPos(list[i]); sprayX=p.x; sprayY=p.y } } })
+wx.onTouchEnd(e => { if (page==='game') { spraying=false; touches=[] } })
+wx.onTouchCancel(e => { spraying=false; touches=[] })
+function loop() { render(); raf(loop) }
+load(); resize(); try { wx.onWindowResize(resize) } catch(e) {}; loop()
