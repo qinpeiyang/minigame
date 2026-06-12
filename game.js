@@ -275,138 +275,158 @@ function update() {
 
 function bg() {
   const g = ctx.createLinearGradient(0, 0, 0, H)
-  g.addColorStop(0, '#073D89'); g.addColorStop(.45, '#086DB3'); g.addColorStop(1, '#02295C')
+  g.addColorStop(0, '#42D7FF'); g.addColorStop(.28, '#0B8BDD'); g.addColorStop(.72, '#07539F'); g.addColorStop(1, '#02235D')
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H)
-  ctx.save(); ctx.globalAlpha = .16; ctx.strokeStyle = '#BDF4FF'; ctx.lineWidth = 1
-  for (let y = -((camera.y * .22) % 44); y < H; y += 44) { ctx.beginPath(); ctx.moveTo(0, y); ctx.bezierCurveTo(W * .25, y + 14, W * .7, y - 14, W, y + 5); ctx.stroke() }
+
+  // 阳光光束
+  ctx.save()
+  ctx.globalAlpha = .18
+  const ray = ctx.createLinearGradient(W * .18, 0, W * .72, H)
+  ray.addColorStop(0, 'rgba(255,255,255,.7)'); ray.addColorStop(1, 'rgba(255,255,255,0)')
+  ctx.fillStyle = ray
+  for (let i = 0; i < 4; i++) {
+    const x = -W * .15 + i * W * .27 + Math.sin(frame * .005 + i) * 18
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + W * .20, 0); ctx.lineTo(x + W * .52, H); ctx.lineTo(x + W * .25, H); ctx.closePath(); ctx.fill()
+  }
   ctx.restore()
+
+  // 水波纹/焦散，参考休闲广告图的亮蓝水底
+  ctx.save(); ctx.globalAlpha = .22; ctx.strokeStyle = '#D8FDFF'; ctx.lineWidth = 1.2
+  for (let y = -((camera.y * .18 + frame * .55) % 48); y < H + 10; y += 48) {
+    ctx.beginPath()
+    for (let x = -20; x <= W + 20; x += 28) {
+      const yy = y + Math.sin((x + frame * 1.4) * .025) * 7
+      if (x === -20) ctx.moveTo(x, yy); else ctx.lineTo(x, yy)
+    }
+    ctx.stroke()
+  }
+  ctx.restore()
+
+  // 远景鱼群剪影
+  ctx.save(); ctx.globalAlpha = .18; ctx.fillStyle = '#003E83'
+  for (let i = 0; i < 10; i++) {
+    const x = (i * 213 - camera.x * .12 + frame * (.12 + i * .01)) % (W + 160) - 80
+    const y = 90 + (i * 73 - camera.y * .08) % Math.max(160, H - 170)
+    ctx.beginPath(); ctx.ellipse(x, y, 18 + i % 3 * 5, 7 + i % 2 * 2, 0, 0, Math.PI * 2); ctx.fill()
+    ctx.beginPath(); ctx.moveTo(x - 18, y); ctx.lineTo(x - 32, y - 9); ctx.lineTo(x - 28, y); ctx.lineTo(x - 32, y + 9); ctx.closePath(); ctx.fill()
+  }
+  ctx.restore()
+
   drawCorals()
+
+  // 轻微暗角，中心更聚焦
+  const vg = ctx.createRadialGradient(W / 2, H * .45, Math.min(W, H) * .12, W / 2, H / 2, Math.max(W, H) * .72)
+  vg.addColorStop(0, 'rgba(255,255,255,0)'); vg.addColorStop(1, 'rgba(0,14,50,.26)')
+  ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H)
 }
 
 function drawCorals() {
-  const baseY = world.h - camera.y - 18
-  if (baseY < -120 || baseY > H + 80) return
-  for (let i = 0; i < 18; i++) {
-    const x = (i * 157 - camera.x * .7) % (W + 180) - 90
-    const h = 24 + (i % 5) * 12
-    ctx.fillStyle = i % 3 === 0 ? '#FF786B' : i % 3 === 1 ? '#33CCAA' : '#FFB84A'
-    ctx.beginPath(); ctx.ellipse(x, baseY, 16, h, 0, Math.PI, 0); ctx.fill()
+  const baseY = world.h - camera.y - 16
+  if (baseY < -140 || baseY > H + 100) return
+  ctx.save()
+  // 沙地
+  const sand = ctx.createLinearGradient(0, baseY - 26, 0, baseY + 80)
+  sand.addColorStop(0, '#E7C66C'); sand.addColorStop(1, '#9B7330')
+  ctx.fillStyle = sand
+  ctx.beginPath(); ctx.moveTo(0, baseY)
+  for (let x = 0; x <= W + 40; x += 40) ctx.quadraticCurveTo(x + 20, baseY - 10 + Math.sin((x + frame) * .02) * 3, x + 40, baseY)
+  ctx.lineTo(W + 40, H + 80); ctx.lineTo(0, H + 80); ctx.closePath(); ctx.fill()
+
+  function plant(x, h, c1, c2) {
+    const gx = ((x - camera.x * .55) % (W + 160)) - 80
+    ctx.strokeStyle = c1; ctx.lineWidth = 8; ctx.lineCap = 'round'
+    ctx.beginPath(); ctx.moveTo(gx, baseY + 4); ctx.bezierCurveTo(gx - 12, baseY - h * .35, gx + 16, baseY - h * .68, gx, baseY - h); ctx.stroke()
+    ctx.strokeStyle = c2; ctx.lineWidth = 5
+    ctx.beginPath(); ctx.moveTo(gx, baseY - h * .42); ctx.quadraticCurveTo(gx - 32, baseY - h * .65, gx - 20, baseY - h * .88); ctx.stroke()
+    ctx.beginPath(); ctx.moveTo(gx, baseY - h * .55); ctx.quadraticCurveTo(gx + 34, baseY - h * .72, gx + 24, baseY - h * .98); ctx.stroke()
   }
+  for (let i = 0; i < 16; i++) plant(i * 148 + 30, 44 + (i % 5) * 15, i % 2 ? '#2DE0A3' : '#FF6F7A', i % 3 ? '#75F4C4' : '#FFB1AA')
+  // 贝壳/石头
+  for (let i = 0; i < 12; i++) {
+    const x = ((i * 99 - camera.x * .65) % (W + 120)) - 60, y = baseY + 10 + (i % 3) * 9
+    ctx.fillStyle = i % 2 ? '#F5E0A7' : '#7DD3FF'; ctx.beginPath(); ctx.ellipse(x, y, 9 + i % 4, 5 + i % 3, 0, 0, Math.PI * 2); ctx.fill()
+  }
+  ctx.restore()
 }
 
 function fishShape(x, y, r, face, color, tier, label) {
   const invBlink = label === player.name && invincible > 0 && Math.floor(frame / 6) % 2 === 0
-  const swim = Math.sin(frame * .12 + x * .03) * r * .06
+  const swim = Math.sin(frame * .12 + x * .03) * r * .055
+  const wiggle = Math.sin(frame * .22 + y * .02) * r * .08
   ctx.save()
   ctx.translate(x, y + swim)
   ctx.scale(face, 1)
   ctx.globalAlpha = invBlink ? .55 : 1
-  ctx.lineJoin = 'round'
-  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round'
 
-  function fin(px, py, points, fill) {
+  // 柔和投影，让角色像贴图而不是几何图形
+  ctx.save(); ctx.globalAlpha = .22; ctx.fillStyle = '#001A3E'
+  ctx.beginPath(); ctx.ellipse(-r * .05, r * .36, r * 1.25, r * .36, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore()
+
+  function grad(c1, c2, c3) { const g = ctx.createLinearGradient(-r * 1.25, -r, r * 1.55, r); g.addColorStop(0, c1); g.addColorStop(.52, c2); g.addColorStop(1, c3); return g }
+  function stroke(w) { ctx.strokeStyle = 'rgba(2,25,58,.42)'; ctx.lineWidth = Math.max(1.5, r * w); ctx.stroke() }
+  function pathTail(fill, upper=.58, lower=.58) {
     ctx.fillStyle = fill
-    ctx.strokeStyle = 'rgba(5,27,60,.36)'
-    ctx.lineWidth = Math.max(1.2, r * .055)
-    ctx.beginPath()
-    ctx.moveTo(px + points[0][0] * r, py + points[0][1] * r)
-    for (let i = 1; i < points.length; i++) ctx.lineTo(px + points[i][0] * r, py + points[i][1] * r)
-    ctx.closePath(); ctx.fill(); ctx.stroke()
+    ctx.beginPath(); ctx.moveTo(-r * 1.12, 0); ctx.quadraticCurveTo(-r * 1.72, -r * upper + wiggle, -r * 2.05, -r * .28); ctx.quadraticCurveTo(-r * 1.74, 0, -r * 2.05, r * .28); ctx.quadraticCurveTo(-r * 1.72, r * lower + wiggle, -r * 1.12, 0); ctx.closePath(); ctx.fill(); stroke(.055)
   }
-  function bodyGradient(c1, c2, c3) {
-    const g = ctx.createLinearGradient(-r * 1.2, -r, r * 1.45, r)
-    g.addColorStop(0, c1); g.addColorStop(.55, c2); g.addColorStop(1, c3)
-    return g
-  }
-  function eye(ex, ey, er) {
+  function fin(points, fill) { ctx.fillStyle = fill; ctx.beginPath(); ctx.moveTo(points[0][0] * r, points[0][1] * r); for (let i=1;i<points.length;i++) ctx.lineTo(points[i][0]*r, points[i][1]*r); ctx.closePath(); ctx.fill(); stroke(.04) }
+  function eye(ex, ey, er, angry=false) {
     ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.arc(ex, ey, er, 0, Math.PI * 2); ctx.fill()
-    ctx.fillStyle = '#082554'; ctx.beginPath(); ctx.arc(ex + er * .28, ey - er * .05, er * .42, 0, Math.PI * 2); ctx.fill()
-    ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.arc(ex + er * .43, ey - er * .28, er * .16, 0, Math.PI * 2); ctx.fill()
+    ctx.fillStyle = '#06204A'; ctx.beginPath(); ctx.arc(ex + er * .25, ey, er * .45, 0, Math.PI * 2); ctx.fill()
+    ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.arc(ex + er * .42, ey - er * .28, er * .15, 0, Math.PI * 2); ctx.fill()
+    if (angry) { ctx.strokeStyle = '#09224D'; ctx.lineWidth = Math.max(1.2, r*.045); ctx.beginPath(); ctx.moveTo(ex-er*.85, ey-er*.8); ctx.lineTo(ex+er*.8, ey-er*.35); ctx.stroke() }
   }
-  function shine() {
-    ctx.fillStyle = 'rgba(255,255,255,.28)'
-    ctx.beginPath(); ctx.ellipse(-r * .22, -r * .34, r * .7, r * .18, -.22, 0, Math.PI * 2); ctx.fill()
-  }
+  function cheek(cx, cy) { ctx.fillStyle = 'rgba(255,120,120,.28)'; ctx.beginPath(); ctx.ellipse(cx, cy, r*.18, r*.1, -.15, 0, Math.PI*2); ctx.fill() }
+  function shine() { ctx.fillStyle = 'rgba(255,255,255,.32)'; ctx.beginPath(); ctx.ellipse(-r*.18, -r*.35, r*.72, r*.16, -.2, 0, Math.PI*2); ctx.fill(); ctx.fillStyle='rgba(255,255,255,.16)'; ctx.beginPath(); ctx.arc(r*.28,-r*.48,r*.11,0,Math.PI*2); ctx.fill() }
+  function smile(mx, my, mr) { ctx.strokeStyle = 'rgba(5,25,50,.45)'; ctx.lineWidth = Math.max(1.2, r*.04); ctx.beginPath(); ctx.arc(mx, my, mr, .15, Math.PI*.9); ctx.stroke() }
 
   if (tier === 3) {
-    // 河豚：参考图那种圆滚滚卡通鱼，刺和嘴都更明显
-    ctx.fillStyle = bodyGradient('#FFF18A', '#E6C55C', '#B49438')
-    ctx.strokeStyle = 'rgba(40,45,35,.45)'; ctx.lineWidth = Math.max(2, r * .08)
-    ctx.beginPath(); ctx.ellipse(0, 0, r * 1.08, r * .96, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
-    fin(-r * .95, 0, [[0,0],[-.72,-.45],[-.52,0],[-.72,.45]], '#D7B144')
-    fin(-r * .18, -r * .7, [[0,0],[-.38,-.46],[.28,-.22]], '#F5D264')
-    ctx.fillStyle = '#FFF6B3'
-    for (let i = 0; i < 14; i++) {
-      const a = i / 14 * Math.PI * 2
-      const px = Math.cos(a) * r * .78, py = Math.sin(a) * r * .68
-      ctx.beginPath(); ctx.arc(px, py, r * .055, 0, Math.PI * 2); ctx.fill()
-    }
-    eye(r * .42, -r * .22, r * .16)
-    ctx.strokeStyle = '#6A4B22'; ctx.lineWidth = Math.max(1.5, r * .045)
-    ctx.beginPath(); ctx.arc(r * .72, r * .14, r * .16, .15, Math.PI * 1.85); ctx.stroke()
+    pathTail('#C79D3D', .45, .45)
+    fin([[-.12,-.78],[-.44,-1.18],[.35,-.86]], '#F7DB70')
+    fin([[.02,.7],[-.2,1.05],[.54,.82]], '#DAB653')
+    ctx.fillStyle = grad('#FFF6A6', '#E7C75F', '#B88A33')
+    ctx.beginPath(); ctx.ellipse(0, 0, r * 1.05, r * .96, 0, 0, Math.PI * 2); ctx.fill(); stroke(.075)
+    ctx.fillStyle = '#FFF9C5'
+    for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2; ctx.beginPath(); ctx.arc(Math.cos(a)*r*.78, Math.sin(a)*r*.68, r*.045, 0, Math.PI*2); ctx.fill() }
+    shine(); eye(r*.43, -r*.22, r*.16); cheek(r*.62, r*.18); smile(r*.72, r*.13, r*.13)
   } else if (tier === 4) {
-    // 魔鬼鱼：扁平的大翼，比普通椭圆好看很多
-    ctx.fillStyle = bodyGradient('#C8B8FF', '#8266E8', '#4E399B')
-    ctx.strokeStyle = 'rgba(22,20,70,.45)'; ctx.lineWidth = Math.max(2, r * .075)
-    ctx.beginPath()
-    ctx.moveTo(r * 1.35, 0)
-    ctx.bezierCurveTo(r * .6, -r * 1.0, -r * .75, -r * .9, -r * 1.45, -r * .1)
-    ctx.bezierCurveTo(-r * .52, -r * .25, -r * .52, r * .25, -r * 1.45, r * .1)
-    ctx.bezierCurveTo(-r * .75, r * .9, r * .6, r * 1.0, r * 1.35, 0)
-    ctx.closePath(); ctx.fill(); ctx.stroke()
-    shine(); eye(r * .46, -r * .18, r * .12)
-    ctx.strokeStyle = 'rgba(235,245,255,.55)'; ctx.lineWidth = Math.max(1, r * .035)
-    ctx.beginPath(); ctx.moveTo(-r * .2, -r * .16); ctx.quadraticCurveTo(r * .3, 0, -r * .2, r * .16); ctx.stroke()
+    ctx.fillStyle = grad('#DAD0FF', '#8C70F1', '#51339F')
+    ctx.beginPath(); ctx.moveTo(r*1.42, 0); ctx.bezierCurveTo(r*.58,-r*1.08,-r*.9,-r*.92,-r*1.52,-r*.1); ctx.bezierCurveTo(-r*.42,-r*.23,-r*.42,r*.23,-r*1.52,r*.1); ctx.bezierCurveTo(-r*.9,r*.92,r*.58,r*1.08,r*1.42,0); ctx.closePath(); ctx.fill(); stroke(.07)
+    ctx.strokeStyle = 'rgba(255,255,255,.42)'; ctx.lineWidth = Math.max(1, r*.035); ctx.beginPath(); ctx.moveTo(-r*.3,-r*.13); ctx.quadraticCurveTo(r*.36,0,-r*.3,r*.13); ctx.stroke()
+    shine(); eye(r*.48, -r*.16, r*.12); cheek(r*.62, r*.11)
   } else if (tier >= 5) {
-    // 鲨鱼/巨鲨：尖头、背鳍、牙齿和鳃线
-    const dark = tier === 6 ? '#2F4358' : '#5B87A8'
-    const mid = tier === 6 ? '#55718A' : '#7FB2D0'
-    ctx.fillStyle = bodyGradient(mid, dark, '#20364D')
-    ctx.strokeStyle = 'rgba(3,18,38,.55)'; ctx.lineWidth = Math.max(2, r * .075)
-    ctx.beginPath()
-    ctx.moveTo(r * 1.7, 0)
-    ctx.bezierCurveTo(r * 1.18, -r * .58, r * .18, -r * .82, -r * 1.08, -r * .6)
-    ctx.bezierCurveTo(-r * 1.55, -r * .42, -r * 1.55, r * .42, -r * 1.08, r * .6)
-    ctx.bezierCurveTo(r * .18, r * .82, r * 1.18, r * .58, r * 1.7, 0)
-    ctx.closePath(); ctx.fill(); ctx.stroke()
-    fin(-r * 1.05, 0, [[0,0],[-.78,-.66],[-.58,0],[-.78,.66]], '#41647D')
-    fin(-r * .08, -r * .68, [[0,0],[-.28,-.78],[.44,-.2]], '#41647D')
-    fin(r * .1, r * .55, [[0,0],[-.18,.48],[.48,.14]], '#41647D')
-    ctx.fillStyle = 'rgba(255,255,255,.68)'
-    ctx.beginPath(); ctx.ellipse(r * .56, r * .28, r * .62, r * .22, -.08, 0, Math.PI * 2); ctx.fill()
-    eye(r * .75, -r * .22, r * .13)
-    ctx.strokeStyle = '#21384D'; ctx.lineWidth = Math.max(1, r * .035)
-    for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.moveTo(r * .34 - i * r * .12, -r * .08); ctx.lineTo(r * .25 - i * r * .12, r * .15); ctx.stroke() }
-    ctx.fillStyle = '#FFFFFF'
-    for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.moveTo(r * .94 + i * r * .08, r * .16); ctx.lineTo(r * 1.0 + i * r * .08, r * .31); ctx.lineTo(r * 1.08 + i * r * .08, r * .15); ctx.fill() }
+    const giant = tier === 6
+    const c1 = giant ? '#8DA6B8' : '#A7D3EA', c2 = giant ? '#465E76' : '#5F95B8', c3 = giant ? '#23384E' : '#2C5D85'
+    pathTail(giant ? '#314C64' : '#4D82A5', .7, .7)
+    fin([[-.05,-.68],[-.34,-1.28],[.55,-.82]], giant ? '#314C64' : '#4D82A5')
+    fin([[.12,.54],[-.08,.95],[.58,.7]], giant ? '#314C64' : '#4D82A5')
+    ctx.fillStyle = grad(c1, c2, c3)
+    ctx.beginPath(); ctx.moveTo(r*1.72, 0); ctx.bezierCurveTo(r*1.13,-r*.62,r*.1,-r*.84,-r*1.1,-r*.6); ctx.bezierCurveTo(-r*1.58,-r*.4,-r*1.58,r*.4,-r*1.1,r*.6); ctx.bezierCurveTo(r*.1,r*.84,r*1.13,r*.62,r*1.72,0); ctx.closePath(); ctx.fill(); stroke(.075)
+    ctx.fillStyle = 'rgba(255,255,255,.68)'; ctx.beginPath(); ctx.ellipse(r*.54, r*.28, r*.62, r*.2, -.08, 0, Math.PI*2); ctx.fill()
+    shine(); eye(r*.74, -r*.22, r*.13, true)
+    ctx.strokeStyle = 'rgba(7,32,56,.5)'; ctx.lineWidth = Math.max(1, r*.033); for (let i=0;i<3;i++){ctx.beginPath();ctx.moveTo(r*.34-i*r*.12,-r*.08);ctx.lineTo(r*.25-i*r*.12,r*.15);ctx.stroke()}
+    ctx.fillStyle = '#FFFFFF'; for (let i=0;i<5;i++){ctx.beginPath();ctx.moveTo(r*.86+i*r*.08,r*.13);ctx.lineTo(r*.93+i*r*.08,r*.31);ctx.lineTo(r*1.02+i*r*.08,r*.13);ctx.fill()}
   } else {
-    // 小丑鱼/热带鱼：大色块、白边、条纹，贴近参考图的Q版风格
-    const palette = tier === 1
-      ? ['#FF9B2F', '#FF6E1F', '#D74E18', '#FFFFFF']
-      : ['#39E4FF', '#208DFF', '#1A56C8', '#FFE66D']
-    fin(-r * 1.04, 0, [[0,0],[-.72,-.55],[-.55,0],[-.72,.55]], palette[2])
-    fin(-r * .16, -r * .7, [[0,0],[-.32,-.48],[.36,-.2]], palette[2])
-    fin(-r * .03, r * .66, [[0,0],[-.18,.4],[.45,.12]], palette[2])
-    ctx.fillStyle = bodyGradient(palette[0], palette[1], palette[2])
-    ctx.strokeStyle = 'rgba(5,27,60,.45)'; ctx.lineWidth = Math.max(2, r * .08)
-    ctx.beginPath(); ctx.ellipse(0, 0, r * 1.38, r * .82, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+    const palette = tier === 1 ? ['#FFC35A', '#FF8128', '#E6501E', '#FFFFFF'] : ['#71F4FF', '#2397FF', '#174FC4', '#FFE85D']
+    pathTail(palette[2], .6, .6)
+    fin([[-.14,-.72],[-.42,-1.1],[.44,-.84]], palette[2])
+    fin([[0,.64],[-.2,1.0],[.5,.78]], palette[2])
+    ctx.fillStyle = grad(palette[0], palette[1], palette[2])
+    ctx.beginPath(); ctx.ellipse(0, 0, r*1.38, r*.82, 0, 0, Math.PI*2); ctx.fill(); stroke(.075)
     if (tier === 1) {
-      ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = r * .24
-      ;[-.48, .16].forEach(px => { ctx.beginPath(); ctx.moveTo(px * r, -r * .68); ctx.quadraticCurveTo((px + .08) * r, 0, px * r, r * .68); ctx.stroke() })
-      ctx.strokeStyle = 'rgba(8,29,55,.5)'; ctx.lineWidth = r * .045
-      ;[-.62, -.34, .02, .28].forEach(px => { ctx.beginPath(); ctx.moveTo(px * r, -r * .67); ctx.quadraticCurveTo((px + .08) * r, 0, px * r, r * .67); ctx.stroke() })
+      ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = r*.23
+      ;[-.5,.16].forEach(px=>{ctx.beginPath();ctx.moveTo(px*r,-r*.65);ctx.quadraticCurveTo((px+.08)*r,0,px*r,r*.65);ctx.stroke()})
+      ctx.strokeStyle = 'rgba(6,28,58,.42)'; ctx.lineWidth = r*.043
+      ;[-.64,-.36,.02,.3].forEach(px=>{ctx.beginPath();ctx.moveTo(px*r,-r*.67);ctx.quadraticCurveTo((px+.08)*r,0,px*r,r*.67);ctx.stroke()})
     } else {
-      ctx.fillStyle = palette[3]
-      ctx.beginPath(); ctx.moveTo(-r * .05, -r * .75); ctx.lineTo(r * .32, 0); ctx.lineTo(-r * .05, r * .75); ctx.lineTo(-r * .42, 0); ctx.closePath(); ctx.fill()
-      ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = r * .055
-      for (let i = -2; i <= 1; i++) { ctx.beginPath(); ctx.moveTo(i * r * .28, -r * .55); ctx.lineTo(i * r * .28 + r * .18, r * .55); ctx.stroke() }
+      ctx.fillStyle = palette[3]; ctx.beginPath(); ctx.moveTo(-r*.07,-r*.72); ctx.lineTo(r*.34,0); ctx.lineTo(-r*.07,r*.72); ctx.lineTo(-r*.46,0); ctx.closePath(); ctx.fill()
+      ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = r*.055; for(let i=-2;i<=1;i++){ctx.beginPath();ctx.moveTo(i*r*.28,-r*.55);ctx.lineTo(i*r*.28+r*.18,r*.55);ctx.stroke()}
     }
-    shine(); eye(r * .72, -r * .2, r * .18)
-    ctx.fillStyle = 'rgba(7,31,68,.22)'; ctx.beginPath(); ctx.ellipse(-r * .15, r * .1, r * .17, r * .48, .15, 0, Math.PI * 2); ctx.fill()
+    shine(); eye(r*.72, -r*.2, r*.18); cheek(r*.9, r*.12); smile(r*.98, r*.1, r*.12)
   }
   ctx.restore()
   if (label) {
-    ctx.save(); ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#E9FCFF'; ctx.strokeStyle = 'rgba(4,20,50,.8)'; ctx.lineWidth = 3
+    ctx.save(); ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#FFFFFF'; ctx.strokeStyle = 'rgba(1,20,50,.82)'; ctx.lineWidth = 3.5
     ctx.strokeText(label, x, y - r - 16); ctx.fillText(label, x, y - r - 16); ctx.restore()
   }
 }
@@ -423,10 +443,24 @@ function drawProp(p) {
   ctx.restore()
 }
 
+function drawFood(o) {
+  const x = worldToScreenX(o.x), y = worldToScreenY(o.y)
+  if (x < -24 || x > W + 24 || y < -24 || y > H + 24) return
+  ctx.save(); ctx.translate(x, y); ctx.rotate(Math.sin(frame * .03 + o.v) * .25)
+  const pulse = 1 + Math.sin(frame * .08 + o.v) * .08
+  ctx.scale(pulse, pulse)
+  const g = ctx.createRadialGradient(-o.r*.35, -o.r*.45, 1, 0, 0, o.r*1.4)
+  g.addColorStop(0, '#FFFFFF'); g.addColorStop(.42, o.color); g.addColorStop(1, o.color === '#FFE66D' ? '#FF9D34' : '#16A4DD')
+  ctx.fillStyle = g; ctx.shadowColor = o.color; ctx.shadowBlur = 10
+  ctx.beginPath(); ctx.arc(0, 0, o.r * 1.12, 0, Math.PI * 2); ctx.fill()
+  ctx.shadowBlur = 0; ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.beginPath(); ctx.arc(-o.r*.32, -o.r*.35, o.r*.32, 0, Math.PI*2); ctx.fill()
+  ctx.restore()
+}
+
 function render() {
   bg()
   bubbles.forEach(b => { const x = worldToScreenX(b.x), y = worldToScreenY(b.y); if (x > -20 && x < W + 20 && y > -20 && y < H + 20) { ctx.globalAlpha = b.a; ctx.strokeStyle = '#C9F8FF'; ctx.lineWidth = 1.3; ctx.beginPath(); ctx.arc(x, y, b.r, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1 } })
-  foods.forEach(o => { const x = worldToScreenX(o.x), y = worldToScreenY(o.y); if (x > -20 && x < W + 20 && y > -20 && y < H + 20) { ctx.fillStyle = o.color; ctx.beginPath(); ctx.arc(x, y, o.r, 0, Math.PI * 2); ctx.fill() } })
+  foods.forEach(drawFood)
   props.forEach(drawProp)
   fishes.forEach(f => { const x = worldToScreenX(f.x), y = worldToScreenY(f.y); if (x > -120 && x < W + 120 && y > -80 && y < H + 80) fishShape(x, y, f.r, f.face, evoColors[f.tier - 1], f.tier, f.tier > level ? evoNames[f.tier - 1] : '') })
   particles.forEach(p => { ctx.globalAlpha = clamp(p.life / p.max, 0, 1); ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(worldToScreenX(p.x), worldToScreenY(p.y), p.r, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1 })
