@@ -153,17 +153,44 @@ function drawObject(kind, x, y, s, clean) {
 }
 
 function objectBox() { const size = Math.min(W * .82, H * .36); return { x: W/2, y: H*.45, s: size / 330, size } }
-function startLevel(idx) {
-  currentLevel = idx; page = 'game'; activeTab = 'home'; startedAt = Date.now(); gameTime = 0; cleanRatio = 0; water = []; foamZones = []; tornado = null; spraying = false
-  const lv = levels[idx]; const box = objectBox(); dirt = []
-  const count = Math.floor(42 + lv[3] * 30)
+function playArea() { return { x: 14, y: 94, w: W - 28, h: H - 214 } }
+function levelTheme(idx) {
+  const lv = levels[idx]
+  if (idx < 5) return { base1: '#F7FBFF', base2: '#E9F1F7', line: '#DCE6EE', stain: '#E92020', accent: '#9EA9B4', title: lv[0] + '表面' }
+  if (idx < 10) return { base1: '#FDFDFD', base2: '#F0F4F7', line: '#E1E7EC', stain: '#E51D1D', accent: '#B7C1C8', title: lv[0] + '外墙' }
+  if (idx < 15) return { base1: '#F1F5F7', base2: '#DDE6EC', line: '#C8D4DC', stain: '#F01818', accent: '#8898A7', title: lv[0] + '机身' }
+  return { base1: '#F5F1E8', base2: '#E7DAC6', line: '#D1BEA0', stain: '#E91515', accent: '#A1845D', title: lv[0] + '巨像' }
+}
+function makeDirtPatch(x, y, r, hp, typeIndex, style, text) {
+  return { x, y, r, hp, max: hp, type: typeIndex, style, text: text || '', wob: rand(0, 99), rot: rand(-.35, .35), w: rand(.9, 1.8), h: rand(.42, 1.05) }
+}
+function generateSurfaceDirt(idx) {
+  const area = playArea(), lv = levels[idx]
+  const count = Math.floor(70 + lv[3] * 45)
+  dirt = []
   for (let i = 0; i < count; i++) {
     const typeIndex = clamp(Math.floor(rand(0, lv[4] + 1)), 0, stainTypes.length - 1)
     const st = stainTypes[typeIndex]
-    const rx = rand(-140, 140), ry = rand(-105, 100), rr = rand(10, 25) * (1 + lv[3] * .08)
-    dirt.push({ x: box.x + rx * box.s, y: box.y + ry * box.s, r: rr * box.s, hp: st.hp * lv[3], max: st.hp * lv[3], type: typeIndex, wob: rand(0, 9) })
+    const x = rand(area.x + 28, area.x + area.w - 28)
+    const y = rand(area.y + 34, area.y + area.h - 34)
+    const r = rand(9, 27) * (1 + lv[3] * .05)
+    const style = Math.random() < .44 ? 'stroke' : Math.random() < .72 ? 'splash' : 'graffiti'
+    const words = ['重污', '油污', '泥', '清洗', '脏', '污渍', 'NO', '99%', '灰尘', '顽固']
+    dirt.push(makeDirtPatch(x, y, r, st.hp * lv[3] * rand(.85, 1.35), typeIndex, style, words[Math.floor(rand(0, words.length))]))
+  }
+  // 大的广告涂鸦/红色喷漆，制造截图里那种“满屏脏”的爽感
+  const big = Math.floor(4 + idx / 3)
+  for (let i = 0; i < big; i++) {
+    const x = rand(area.x + area.w * .18, area.x + area.w * .82)
+    const y = rand(area.y + area.h * .18, area.y + area.h * .78)
+    dirt.push(makeDirtPatch(x, y, rand(42, 76), 4.5 * lv[3], clamp(lv[4],0,5), 'bigGraffiti', ['脏', '污', '洗', '乱', '旧'][i % 5]))
   }
 }
+function startLevel(idx) {
+  currentLevel = idx; page = 'game'; activeTab = 'home'; startedAt = Date.now(); gameTime = 0; cleanRatio = 0; water = []; foamZones = []; tornado = null; spraying = false
+  generateSurfaceDirt(idx)
+}
+
 function updateClean() { const sum = dirt.reduce((a, d) => a + Math.max(0, d.hp), 0), max = dirt.reduce((a, d) => a + d.max, 0); cleanRatio = max ? 1 - sum / max : 1 }
 function cleanAt(x, y, radius, power, kind = 'water') {
   const p = power * (kind === 'foam' ? .42 : 1)
@@ -181,11 +208,11 @@ function finishLevel() {
 }
 function useSkill(name) {
   if (page !== 'game') return
-  const box = objectBox()
-  if (name === 'shock') { cleanAt(sprayX || box.x, sprayY || box.y, 90 + gunTier() * 16, 8, 'water'); popText('冲击波！', sprayX || box.x, sprayY || box.y); splash(sprayX || box.x, sprayY || box.y, '#C9F8FF', 36) }
-  if (name === 'foam') { foamZones.push({ x: sprayX || box.x, y: sprayY || box.y, r: 95, life: 600 }); popText('泡沫清洁', sprayX || box.x, sprayY || box.y) }
-  if (name === 'tornado') { tornado = { x: box.x, y: box.y, a: 0, life: 300 }; popText('超级水龙卷！', box.x, box.y) }
-  if (name === 'purify' && cleanRatio >= .9) { dirt.forEach(d => d.hp = 0); popText('一键净化！', box.x, box.y); updateClean(); finishLevel() }
+  const box = playArea(); const cx = box.x + box.w/2, cy = box.y + box.h/2
+  if (name === 'shock') { cleanAt(sprayX || cx, sprayY || cy, 90 + gunTier() * 16, 8, 'water'); popText('冲击波！', sprayX || cx, sprayY || cy); splash(sprayX || cx, sprayY || cy, '#C9F8FF', 36) }
+  if (name === 'foam') { foamZones.push({ x: sprayX || cx, y: sprayY || cy, r: 95, life: 600 }); popText('泡沫清洁', sprayX || cx, sprayY || cy) }
+  if (name === 'tornado') { tornado = { x: cx, y: cy, a: 0, life: 300 }; popText('超级水龙卷！', cx, cy) }
+  if (name === 'purify' && cleanRatio >= .9) { dirt.forEach(d => d.hp = 0); popText('一键净化！', cx, cy); updateClean(); finishLevel() }
 }
 function splash(x, y, c, n) { for (let i=0;i<n;i++) water.push({ x, y, vx: rand(-3,3), vy: rand(-5,1), r: rand(2,5), life: rand(18,38), max: 38, c }) }
 function popText(text, x, y) { water.push({ text, x, y, vx:0, vy:-1.2, r:0, life:55, max:55, c:'#fff' }) }
@@ -201,31 +228,79 @@ function updateGame() {
     }
     foamZones.forEach(f => { f.life--; cleanAt(f.x + Math.sin(frame*.04)*18, f.y + Math.cos(frame*.035)*18, f.r, gunPower()*.6, 'foam') })
     foamZones = foamZones.filter(f => f.life > 0)
-    if (tornado) { tornado.life--; tornado.a += .16; const box = objectBox(); const x = box.x + Math.cos(tornado.a)*90, y = box.y + Math.sin(tornado.a*1.4)*65; cleanAt(x, y, 76, gunPower()*2.7); if (frame%3===0) splash(x,y,'#BDF7FF',3); if (tornado.life <= 0) tornado = null }
+    if (tornado) { tornado.life--; tornado.a += .16; const area = playArea(); const x = area.x + area.w/2 + Math.cos(tornado.a)*90, y = area.y + area.h/2 + Math.sin(tornado.a*1.4)*65; cleanAt(x, y, 76, gunPower()*2.7); if (frame%3===0) splash(x,y,'#BDF7FF',3); if (tornado.life <= 0) tornado = null }
     updateClean(); if (cleanRatio >= .995) finishLevel()
   }
   water.forEach(p => { p.x += p.vx; p.y += p.vy; p.vy += .05; p.life-- })
   water = water.filter(p => p.life > 0)
 }
 
+function drawSurfaceScene() {
+  const area = playArea(), theme = levelTheme(currentLevel)
+  ctx.save()
+  // 主清洁面板：占满屏幕中间，像参考图那样是巨物表面而不是小图标
+  const g = ctx.createLinearGradient(area.x, area.y, area.x, area.y + area.h)
+  g.addColorStop(0, theme.base1); g.addColorStop(1, theme.base2)
+  ctx.fillStyle = g; roundRect(area.x, area.y, area.w, area.h, 18); ctx.fill()
+  ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 2; ctx.stroke()
+
+  // 砖缝/金属板缝
+  ctx.save(); ctx.beginPath(); roundRect(area.x, area.y, area.w, area.h, 18); ctx.clip()
+  ctx.strokeStyle = theme.line; ctx.lineWidth = 1
+  const tile = currentLevel < 10 ? 64 : currentLevel < 15 ? 82 : 72
+  for (let x = area.x - ((frame * .08) % tile); x < area.x + area.w + tile; x += tile) { ctx.beginPath(); ctx.moveTo(x, area.y); ctx.lineTo(x, area.y + area.h); ctx.stroke() }
+  for (let y = area.y + 32; y < area.y + area.h; y += tile * .74) { ctx.beginPath(); ctx.moveTo(area.x, y); ctx.lineTo(area.x + area.w, y); ctx.stroke() }
+  // 几个凸起零件/窗口，增强巨物感
+  ctx.fillStyle = 'rgba(255,255,255,.58)'
+  for (let i=0;i<8;i++) { const x=area.x+22+(i%2)*(area.w-88)+Math.sin(i)*14, y=area.y+70+i*58; if(y<area.y+area.h-42){ roundRect(x,y,64,34,8); ctx.fill() } }
+  ctx.fillStyle = theme.accent + '55'
+  roundRect(area.x + area.w*.34, area.y + area.h*.48, area.w*.32, 28, 12); ctx.fill()
+  ctx.restore()
+
+  // 远景巨物轮廓，仅作“当前关卡物体”的提示，不抢清洁表面主视觉
+  ctx.save(); ctx.globalAlpha = .13; drawObject(levels[currentLevel][2], area.x + area.w*.5, area.y + area.h*.55, Math.min(area.w*.8, 290)/330, .95); ctx.restore()
+  ctx.restore()
+}
+function drawDirtPatch(d) {
+  if (d.hp <= 0) return
+  const theme = levelTheme(currentLevel)
+  const st = stainTypes[d.type]
+  const a = clamp(d.hp / d.max, 0, 1) * .96
+  ctx.save(); ctx.globalAlpha = a; ctx.translate(d.x, d.y); ctx.rotate(d.rot)
+  const red = d.type >= 4 ? 'rgba(232,16,24,.92)' : d.type === 2 ? 'rgba(42,34,28,.85)' : d.type === 3 ? 'rgba(39,132,67,.78)' : theme.stain
+  if (d.style === 'stroke') {
+    ctx.strokeStyle = red; ctx.lineWidth = Math.max(5, d.r * .36); ctx.lineCap = 'round'; ctx.lineJoin = 'round'
+    ctx.beginPath(); ctx.moveTo(-d.r*d.w, rand(-2,2)); ctx.bezierCurveTo(-d.r*.45, -d.r*.9*d.h, d.r*.45, d.r*.75*d.h, d.r*d.w, rand(-2,2)); ctx.stroke()
+  } else if (d.style === 'graffiti') {
+    ctx.fillStyle = red; ctx.font = 'bold ' + Math.floor(d.r*1.25) + 'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(d.text, 0, 0)
+    ctx.strokeStyle = red; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, 0, d.r*.86, .2, Math.PI*1.55); ctx.stroke()
+  } else if (d.style === 'bigGraffiti') {
+    ctx.strokeStyle = red; ctx.lineWidth = Math.max(12, d.r*.34); ctx.lineCap='round'; ctx.lineJoin='round'
+    ctx.beginPath(); ctx.moveTo(-d.r*.9, -d.r*.5); ctx.lineTo(-d.r*.1, d.r*.15); ctx.lineTo(d.r*.8, -d.r*.65); ctx.moveTo(-d.r*.6, d.r*.62); ctx.lineTo(d.r*.7, d.r*.45); ctx.stroke()
+    ctx.fillStyle = red; ctx.font = '900 ' + Math.floor(d.r*1.05) + 'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(d.text, 0, 0)
+  } else {
+    const g = ctx.createRadialGradient(-d.r*.2, -d.r*.2, 1, 0, 0, d.r*1.45)
+    g.addColorStop(0, red); g.addColorStop(.75, red); g.addColorStop(1, 'rgba(255,0,0,0)')
+    ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(0, 0, d.r*d.w, d.r*d.h, 0, 0, Math.PI*2); ctx.fill()
+    for(let i=0;i<3;i++){ctx.beginPath();ctx.arc(rand(-d.r,d.r),rand(-d.r*.6,d.r*.6),rand(2,d.r*.22),0,Math.PI*2);ctx.fill()}
+  }
+  ctx.restore()
+}
 function renderGame() {
-  const lv = levels[currentLevel], box = objectBox()
-  ctx.fillStyle = '#E9FCFF'; ctx.fillRect(0,0,W,H)
   bg()
   topGameUI()
-  // 清洗场地玻璃卡
-  card(16, 94, W-32, H-230, .5)
-  drawObject(lv[2], box.x, box.y, box.s, cleanRatio)
-  dirt.forEach(d => { if (d.hp <= 0) return; const st = stainTypes[d.type]; ctx.save(); ctx.globalAlpha = clamp(d.hp / d.max, 0, 1) * .95; ctx.fillStyle = st.color; ctx.beginPath(); ctx.ellipse(d.x + Math.sin(frame*.03+d.wob)*2, d.y, d.r*1.25, d.r*.85, d.wob, 0, Math.PI*2); ctx.fill(); ctx.restore() })
+  drawSurfaceScene()
+  dirt.forEach(drawDirtPatch)
   foamZones.forEach(f => { ctx.globalAlpha = clamp(f.life/80,0,.55); ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha=1 })
-  if (tornado) { ctx.save(); ctx.strokeStyle='#7EE7FF'; ctx.lineWidth=8; ctx.globalAlpha=.65; ctx.beginPath(); for(let a=0;a<Math.PI*4;a+=.25){ const r=8+a*8, x=box.x+Math.cos(a+tornado.a)*r, y=box.y+Math.sin(a+tornado.a)*r*.55; if(a===0)ctx.moveTo(x,y); else ctx.lineTo(x,y)} ctx.stroke(); ctx.restore() }
+  if (tornado) { const area=playArea(); ctx.save(); ctx.strokeStyle='#7EE7FF'; ctx.lineWidth=8; ctx.globalAlpha=.65; ctx.beginPath(); for(let a=0;a<Math.PI*4;a+=.25){ const r=8+a*8, x=area.x+area.w/2+Math.cos(a+tornado.a)*r, y=area.y+area.h/2+Math.sin(a+tornado.a)*r*.55; if(a===0)ctx.moveTo(x,y); else ctx.lineTo(x,y)} ctx.stroke(); ctx.restore() }
   drawSpray()
   water.forEach(p => { ctx.save(); ctx.globalAlpha = clamp(p.life/p.max,0,1); if (p.text) { ctx.fillStyle='#2388FF'; ctx.font='bold 20px sans-serif'; ctx.textAlign='center'; ctx.fillText(p.text,p.x,p.y) } else { ctx.fillStyle=p.c; ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fill() } ctx.restore() })
   bottomGameUI()
 }
+
 function topGameUI() {
   card(12, 12, W-24, 66, .68)
-  ctx.fillStyle = '#164A72'; ctx.font = 'bold 15px sans-serif'; ctx.textAlign='left'; ctx.fillText('Level ' + (currentLevel+1) + '  ' + levels[currentLevel][0], 26, 35)
+  ctx.fillStyle = '#164A72'; ctx.font = 'bold 15px sans-serif'; ctx.textAlign='left'; ctx.fillText('Level ' + (currentLevel+1) + '  ' + levelTheme(currentLevel).title, 26, 35)
   ctx.font = '12px sans-serif'; ctx.fillText(levels[currentLevel][1] + ' · ' + stainTypes[clamp(levels[currentLevel][4]-1,0,5)].name + '挑战', 26, 58)
   ctx.fillStyle='rgba(22,93,150,.14)'; roundRect(W-142, 28, 102, 14, 7); ctx.fill(); ctx.fillStyle='#39D98A'; roundRect(W-142, 28, 102*cleanRatio, 14, 7); ctx.fill()
   ctx.fillStyle='#164A72'; ctx.font='bold 13px sans-serif'; ctx.textAlign='right'; ctx.fillText(Math.floor(cleanRatio*100)+'%', W-22, 40); ctx.fillText('⏱ '+gameTime+'s', W-22, 62)
