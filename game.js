@@ -4,6 +4,14 @@
 const canvas = wx.createCanvas()
 const ctx = canvas.getContext('2d')
 
+function nextFrame(cb) {
+  const raf = (typeof requestAnimationFrame === 'function' && requestAnimationFrame)
+    || (canvas && typeof canvas.requestAnimationFrame === 'function' && canvas.requestAnimationFrame.bind(canvas))
+    || (typeof wx !== 'undefined' && typeof wx.requestAnimationFrame === 'function' && wx.requestAnimationFrame.bind(wx))
+  if (raf) return raf(cb)
+  return setTimeout(cb, 1000 / 60)
+}
+
 const DPR = Math.max(1, wx.getSystemInfoSync().pixelRatio || 1)
 let W = 0
 let H = 0
@@ -425,9 +433,9 @@ function loop() {
     running = false
     update()
     render()
-    if (state !== 'hidden') wx.requestAnimationFrame(loop)
+    if (state !== 'hidden') nextFrame(loop)
   }
-  wx.requestAnimationFrame(tick)
+  nextFrame(tick)
 }
 
 try { best = Number(wx.getStorageSync('bestScore') || 0) } catch (e) { best = 0 }
